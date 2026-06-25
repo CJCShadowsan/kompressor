@@ -291,10 +291,21 @@ def prove_hermes_integration(*, fixture: Path | None = None, threshold_chars: in
     events: list[dict[str, Any]] = []
     if proof.exists():
         events = [json.loads(line) for line in proof.read_text(encoding="utf-8").splitlines() if line.strip()]
+    reversible_proof_strategies = {
+        "json_table",
+        "schema_rows",
+        "meta_tokens",
+        "token_lz",
+        "separator_segments",
+        "grammar",
+        "path_dict_rows",
+        "tree_dict",
+    }
     compressed = [
         e
         for e in events
-        if e.get("strategy") == "json_table" and e.get("compressed_chars", 10**9) < e.get("original_chars", 0)
+        if e.get("strategy") in reversible_proof_strategies
+        and e.get("compressed_chars", 10**9) < e.get("original_chars", 0)
     ]
     output = proc.stdout + proc.stderr
     correct = all(label in output for label in ("Total", "CRITICAL", "WARNING", "INFO"))
