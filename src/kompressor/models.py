@@ -5,7 +5,36 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
-CompressionKind = Literal["json_table", "json_path", "xml_path", "pattern_hash", "binary", "none"]
+CompressionKind = Literal[
+    "json_table",
+    "schema_rows",
+    "json_path",
+    "xml_path",
+    "pattern_hash",
+    "meta_tokens",
+    "token_lz",
+    "separator_segments",
+    "grammar",
+    "path_dict_rows",
+    "tree_dict",
+    "session_delta",
+    "sidecar_ref",
+    "log_templates",
+    "log_summary",
+    "ci_output",
+    "blob_ref",
+    "openapi",
+    "terraform_plan",
+    "k8s_yaml",
+    "markdown_outline",
+    "html_visible",
+    "code_symbols",
+    "tool_output",
+    "dedupe",
+    "extractive",
+    "binary",
+    "none",
+]
 
 
 @dataclass(frozen=True)

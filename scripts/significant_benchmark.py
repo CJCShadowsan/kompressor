@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 from __future__ import annotations
 
 import argparse
@@ -16,7 +17,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from kompressor.codecs.json_table import JsonTableCodec
 from kompressor.engine import KompressorEngine
 from kompressor.security import find_secrets, redact_secrets
 
@@ -89,56 +89,158 @@ def _logs(case_id: int, n: int) -> str:
     return "\n".join(lines)
 
 
+def _ci(case_id: int) -> str:
+    passed = "\n".join(f"PASSED tests/test_{case_id}_{i}.py::test_ok" for i in range(120))
+    failed = "\n".join(
+        [
+            f"FAILED tests/test_auth.py::test_token_{case_id}",
+            "Traceback (most recent call last):",
+            '  File "tests/test_auth.py", line 42, in test_token',
+            "AssertionError: expected 200 got 401",
+        ]
+    )
+    warnings = "\n".join("WARNING deprecated fixture" for _ in range(40))
+    return f"pytest run {case_id}\n{passed}\n{warnings}\n{failed}\nexit code 1"
+
+
+def _openapi(case_id: int) -> dict[str, Any]:
+    paths = {}
+    schemas = {}
+    for i in range(24):
+        paths[f"/v1/resource-{i}/{{id}}"] = {
+            "get": {
+                "operationId": f"getResource{i}",
+                "tags": ["resources"],
+                "responses": {"200": {"description": "ok"}},
+            },
+            "post": {
+                "operationId": f"createResource{i}",
+                "tags": ["resources"],
+                "responses": {"201": {"description": "created"}},
+            },
+        }
+        schemas[f"Resource{i}"] = {
+            "type": "object",
+            "properties": {"id": {"type": "string"}, "name": {"type": "string"}},
+        }
+    return {"openapi": "3.1.0", "info": {"title": f"API {case_id}"}, "paths": paths, "components": {"schemas": schemas}}
+
+
+def _terraform(case_id: int) -> dict[str, Any]:
+    return {
+        "resource_changes": [
+            {
+                "address": f"aws_instance.worker[{i}]",
+                "type": "aws_instance",
+                "change": {"actions": [["create"], ["update"], ["delete", "create"]][i % 3]},
+            }
+            for i in range(80)
+        ]
+    }
+
+
+def _k8s(case_id: int) -> str:
+    docs = []
+    for i in range(40):
+        docs.append(
+            f"apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: app-{case_id}-{i}\n  namespace: bench\nspec:\n  replicas: {1 + i % 5}\n  template:\n    spec:\n      containers:\n      - name: app\n        image: ghcr.io/acme/app-{i}:v{case_id}\n"
+        )
+    return "---\n".join(docs)
+
+
+def _html(case_id: int) -> str:
+    cards = "".join(
+        f"<div class='card'><h2>Item {i}</h2><a href='/items/{i}'>Open {i}</a><p>{'noise ' * 40}</p></div>"
+        for i in range(80)
+    )
+    return f"<html><head><title>Bench {case_id}</title><script>{'x=1;' * 100}</script></head><body><h1>Bench</h1>{cards}</body></html>"
+
+
+def _markdown(case_id: int) -> str:
+    return "\n\n".join(f"## Section {i}\n{'This section explains benchmark behavior. ' * 80}" for i in range(24))
+
+
+def _code(case_id: int) -> str:
+    funcs = "\n\n".join(
+        f"def func_{case_id}_{i}(value):\n    total = value + {i}\n    return total\n" for i in range(120)
+    )
+    return "import json\nimport os\n\n" + funcs
+
+
+def _blob(case_id: int) -> dict[str, Any]:
+    import base64
+
+    return {
+        "id": case_id,
+        "payload": base64.b64encode(("x" * 4096).encode()).decode(),
+        "media_type": "application/octet-stream",
+    }
+
+
 def build_cases(count: int) -> list[PayloadCase]:
     cases: list[PayloadCase] = []
     for i in range(count):
-        bucket = i % 5
+        bucket = i % 13
         if bucket in {0, 1}:
             data = _records(i, 36 + (i % 30))
             counts = Counter(row["severity"] for row in data)
             cases.append(
                 PayloadCase(
-                    id=f"json-table-{i:04d}",
-                    kind="json_list_records",
-                    codec_expected="json_table",
-                    data=data,
-                    task={"total": len(data), "severity_counts": dict(counts)},
+                    f"json-table-{i:04d}",
+                    "json_list_records",
+                    "schema_rows",
+                    data,
+                    {"total": len(data), "severity_counts": dict(counts)},
                 )
             )
         elif bucket == 2:
             data = _nested(i)
             cases.append(
                 PayloadCase(
-                    id=f"nested-json-{i:04d}",
-                    kind="nested_json",
-                    codec_expected="json_path",
-                    data=data,
-                    task={"service_count": len(data["services"]), "cluster": data["cluster"]},
+                    f"nested-json-{i:04d}",
+                    "nested_json",
+                    "json_path",
+                    data,
+                    {"service_count": len(data["services"]), "cluster": data["cluster"]},
                 )
             )
         elif bucket == 3:
             data = _xml(i)
             cases.append(
-                PayloadCase(
-                    id=f"xml-{i:04d}",
-                    kind="xml",
-                    codec_expected="xml_path",
-                    data=data,
-                    task={"failure_count": data.count("<failure")},
-                )
+                PayloadCase(f"xml-{i:04d}", "xml", "xml_path", data, {"failure_count": data.count("<failure")})
             )
-        else:
+        elif bucket == 4:
             data = _logs(i, 80 + (i % 40))
             counts = Counter(re.findall(r" (ERROR|WARN|INFO) ", data))
             cases.append(
                 PayloadCase(
-                    id=f"logs-{i:04d}",
-                    kind="logs",
-                    codec_expected="pattern_hash",
-                    data=data,
-                    task={"line_count": len(data.splitlines()), "level_counts": dict(counts)},
+                    f"logs-{i:04d}",
+                    "logs",
+                    "log_templates",
+                    data,
+                    {"line_count": len(data.splitlines()), "level_counts": dict(counts)},
                 )
             )
+        elif bucket == 5:
+            cases.append(PayloadCase(f"ci-{i:04d}", "ci_output", "ci_output", _ci(i), {"must_contain": "FAILED"}))
+        elif bucket == 6:
+            cases.append(PayloadCase(f"openapi-{i:04d}", "openapi", "openapi", _openapi(i), {"operation_count": 48}))
+        elif bucket == 7:
+            cases.append(
+                PayloadCase(f"terraform-{i:04d}", "terraform", "terraform_plan", _terraform(i), {"changes": 80})
+            )
+        elif bucket == 8:
+            cases.append(PayloadCase(f"k8s-{i:04d}", "k8s_yaml", "k8s_yaml", _k8s(i), {"resources": 40}))
+        elif bucket == 9:
+            cases.append(PayloadCase(f"html-{i:04d}", "html", "html_visible", _html(i), {"links": 80}))
+        elif bucket == 10:
+            cases.append(
+                PayloadCase(f"markdown-{i:04d}", "markdown", "markdown_outline", _markdown(i), {"sections": 24})
+            )
+        elif bucket == 11:
+            cases.append(PayloadCase(f"code-{i:04d}", "code", "code_symbols", _code(i), {"symbols": 120}))
+        else:
+            cases.append(PayloadCase(f"blob-{i:04d}", "blob", "blob_ref", _blob(i), {"blob_count": 1}))
     return cases
 
 
@@ -149,15 +251,11 @@ def _payload_text(data: Any) -> str:
 
 
 def _round_trip_pass(data: Any, result: Any) -> bool | None:
-    if result.kind == "json_table":
-        payload = result.optimized_payload
-        first = payload.split("\n", 1)[0]
-        delimiter = first.split('delimiter="', 1)[1].split('"', 1)[0]
-        restored = JsonTableCodec((delimiter,)).decompress(payload, {"delimiter": delimiter})
-        return restored == data
     if result.reversible:
-        # Other current codecs carry local metadata but no CLI round-trip API yet.
-        return None
+        try:
+            return KompressorEngine().decompress(result.optimized_payload, result.metadata) == data
+        except Exception:
+            return None
     return None
 
 

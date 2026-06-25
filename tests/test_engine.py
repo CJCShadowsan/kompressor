@@ -5,9 +5,10 @@ from kompressor.models import KompressorConfig
 def test_engine_routes_json_array_to_table() -> None:
     rows = [{"id": f"AX-{idx}", "event": "auth_timeout_error", "severity": "CRITICAL"} for idx in range(30)]
     result = KompressorEngine().optimize(rows)
-    assert result.kind == "json_table"
+    assert result.kind in {"json_table", "schema_rows"}
     assert result.reversible
     assert result.system_prompt
+    assert KompressorEngine().decompress(result.optimized_payload, result.metadata) == rows
 
 
 def test_engine_threshold_returns_none() -> None:

@@ -54,7 +54,7 @@ def test_plugin_request_rewrite_records_metadata() -> None:
     prepared = get_plugin("claude", threshold_chars=20).prepare_request(request)
     assert prepared["messages"][0]["content"] != BIG_JSON
     assert prepared["_kompressor_plugin"]["harness"] == "claude"
-    assert prepared["_kompressor_plugin"]["rewrites"][0]["strategy"] == "json_table"
+    assert prepared["_kompressor_plugin"]["rewrites"][0]["strategy"] in {"json_table", "schema_rows"}
 
 
 def test_unknown_plugin_rejected() -> None:

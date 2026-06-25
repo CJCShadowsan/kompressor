@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kompressor"
-version = "0.1.0"
+version = "0.2.0"
 description = "Client-side LLM context optimization toolkit with harness plugins."
 readme = "README.md"
 requires-python = ">=3.10"

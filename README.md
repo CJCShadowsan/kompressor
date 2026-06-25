@@ -4,6 +4,91 @@ Kompressor is a local-first LLM context optimization toolkit. It reduces avoidab
 
 Kompressor cannot modify any provider's internal tokenizer or pricing rules. Character-count token estimates are proxies, not exact billing measurements, unless a provider-specific live token-count estimator is explicitly run and recorded.
 
+## Headline benchmark figures
+
+Latest local vNext mixed-strategy benchmark: `artifacts/bench/2026-06-25-vnext-strategies`.
+
+Latest reversible-strategy benchmark: `artifacts/bench/2026-06-25-reversible-strategies`.
+
+| Metric | Mixed strategy result | Reversible-only result |
+|---|---:|---:|
+| Payloads / cases benchmarked | 520 | 320 |
+| Strategies covered | mixed reversible + analytical | 8 reversible |
+| Median character savings | 64.13% | 65.28% |
+| p25 / p75 character savings | 50.20% / 90.82% | not reported |
+| Median `cl100k_base` token savings | 69.39% | 55.20% |
+| p25 / p75 `cl100k_base` token savings | 55.31% / 88.78% | not reported |
+| Negative character-savings cases | 0 | 0 in strategy medians |
+| Negative `cl100k_base` token-savings cases | 0 | 0 |
+| Reversible round trips checked/passed | 80 / 80 | 320 / 320 |
+| Synthetic secret-redaction checks passed | 6 / 6 | not applicable |
+
+Reversible-only median `cl100k_base` token savings by strategy:
+
+| Reversible strategy | Median token savings |
+|---|---:|
+| `sidecar_ref` | 97.73% |
+| `grammar` | 93.64% |
+| `session_delta` | 71.21% |
+| `meta_tokens` | 61.01% |
+| `path_dict_rows` | 49.39% |
+| `tree_dict` | 45.73% |
+| `separator_segments` | 22.73% |
+| `token_lz` | 9.07% |
+
+Mixed-strategy median `cl100k_base` token savings by input kind:
+
+| Input kind | Median token savings |
+|---|---:|
+| Blob/base64 payloads | 98.49% |
+| CI output | 96.36% |
+| Markdown documents | 98.70% |
+| Source code outlines | 88.74% |
+| HTML pages | 83.04% |
+| OpenAPI specs | 71.90% |
+| Terraform plans | 69.39% |
+| Kubernetes YAML | 68.18% |
+| JSON record lists | 55.77% |
+| Logs | 49.59% |
+| Nested JSON path fallback | 28.50% |
+| XML path fallback | 0.00% |
+
+These figures are from a synthetic local benchmark using `tiktoken` `cl100k_base`, not provider billing metadata. Provider-specific claims require provider token-count APIs or actual usage metadata.
+
+## How Kompressor achieves compression
+
+Kompressor chooses the smallest safe strategy from a codec registry. Reversible codecs preserve exact reconstruction; analytical codecs are explicitly marked lossy and preserve counts, indexes, exemplars, hashes, and selected evidence instead of pretending full reconstruction is possible.
+
+The vNext strategy set combines:
+
+Reversible strategies:
+
+- `schema_rows`: typed columnar JSON rows with constant-column elision and enum dictionaries.
+- `meta_tokens`: LZ-style phrase dictionaries inspired by lossless meta-token compression.
+- `token_lz`: tokenizer-proxy repeated-span packing with exact local decompression.
+- `separator_segments`: exact dictionaries for repeated line/paragraph/document segments.
+- `grammar`: Re-Pair-style reversible grammar rules for repeated adjacent token pairs.
+- `path_dict_rows`: path dictionaries plus value rows for nested JSON-like records.
+- `tree_dict`: repeated-subtree dictionaries for JSON/YAML-like object trees.
+- `session_delta`: hash/base-backed exact deltas for repeated session context.
+- `sidecar_ref`: hash-backed local sidecars for very large immutable payloads.
+- `log_templates`: reversible log template/variable encoding.
+- `dedupe`: repeated-block references.
+- Existing `json_table`, `json_path`, `xml_path`, `pattern_hash`, and `binary` fallbacks.
+
+Analytical/task-oriented strategies:
+
+- `log_summary` and `log_templates`: log template extraction, level counts, repeated-pattern summaries, and exact template mode for reversible cases.
+- `ci_output`: failed-test/error/warning extraction with passed-line counts.
+- `openapi`: operation/schema indexes for API specs.
+- `terraform_plan`: action/resource summaries for plan JSON/text.
+- `k8s_yaml`: resource/image/namespace summaries with noisy metadata omitted.
+- `html_visible` and `markdown_outline`: visible headings, links, outlines, and selected document structure.
+- `code_symbols`: import and symbol outlines for source files.
+- `blob_ref`: base64/blob externalization to size/hash references.
+- `dedupe`: repeated-block references.
+- Existing `json_path`, `xml_path`, `pattern_hash`, and `binary` fallbacks.
+
 ## Status
 
 Implementation covers the first multi-harness release surface:
@@ -160,11 +245,38 @@ The patch is marker-bounded, backed up under `~/.kompressor/patches/hermes/`, sy
 
 ## Compression strategies
 
+Reversible/default-safe strategies:
+
+- `schema_rows`: Typed columnar JSON records with enum dictionaries and constant-column elision.
+- `meta_tokens`: LZ-style textual meta-token dictionaries.
+- `token_lz`: tokenizer-proxy repeated-span packing.
+- `separator_segments`: Repeated separator-delimited segment dictionaries.
+- `grammar`: Re-Pair-style reversible grammar rules.
+- `path_dict_rows`: Nested path dictionaries and value rows.
+- `tree_dict`: Repeated-subtree references for JSON-like trees.
+- `session_delta`: Base-context plus exact delta patches; requires local base metadata.
+- `sidecar_ref`: Hash-backed local sidecar references for large immutable payloads.
 - `json_table`: Reversible table format for list-of-dict JSON payloads.
+- `log_templates`: Reversible template/variable encoding for repeated log lines.
+- `dedupe`: Reversible repeated-block references.
 - `json_path`: JSONPath/value representation for nested JSON. Exact local decompression uses Python metadata.
 - `xml_path`: XML path/value representation. Exact local decompression uses Python metadata.
 - `pattern_hash`: Dictionary replacement for repeated log lines.
 - `binary`: Disabled by default for prompt compression; explicit base64/base85 are available through the API.
+
+Analytical/task-oriented strategies:
+
+- `log_summary`: Level counts, template counts, and error/warning exemplars.
+- `ci_output`: Failed-test/error/warning summaries for build logs.
+- `openapi`: Operation/schema index for OpenAPI specs.
+- `terraform_plan`: Resource-action summaries for Terraform plans.
+- `k8s_yaml`: Kubernetes resource/image/namespace summaries.
+- `html_visible`: Visible headings and links from HTML.
+- `markdown_outline`: Section outlines and document structure.
+- `code_symbols`: Import and symbol outlines for source code.
+- `tool_output`: Error/diff/line-selected summaries for agent tool output.
+- `blob_ref`: Base64/blob replacement with size/hash references.
+- `extractive`: Extractive paragraph selection for long natural-language text.
 
 ## Security and privacy
 

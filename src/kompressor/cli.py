@@ -123,8 +123,12 @@ def decompress(path: Path, compare_original: Path | None = typer.Option(None, "-
     if first_line.startswith(JSON_TABLE_MARKER):
         delimiter = first_line.split('delimiter="', 1)[1].split('"', 1)[0]
         restored = JsonTableCodec((delimiter,)).decompress(payload, {"delimiter": delimiter})
+    elif first_line.startswith("<kompressor:schema_rows_v1>"):
+        from kompressor.codecs import SchemaRowsCodec
+
+        restored = SchemaRowsCodec().decompress(payload, {"marker": "<kompressor:schema_rows_v1>"})
     else:
-        raise typer.BadParameter("only json_table payload files are currently CLI-decompressible")
+        raise typer.BadParameter("only json_table and schema_rows payload files are currently CLI-decompressible")
     if compare_original:
         original = _load(compare_original)
         if restored != original:

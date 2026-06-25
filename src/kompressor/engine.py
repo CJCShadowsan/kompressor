@@ -5,7 +5,35 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from kompressor.codecs import BinaryCodec, JsonPathCodec, JsonTableCodec, PatternHashCodec, XmlPathCodec
+from kompressor.codecs import (
+    BinaryCodec,
+    BlobRefCodec,
+    CiOutputCodec,
+    CodeSymbolsCodec,
+    DedupeCodec,
+    ExtractiveTextCodec,
+    GrammarCodec,
+    HtmlVisibleCodec,
+    JsonPathCodec,
+    JsonTableCodec,
+    K8sYamlCodec,
+    LogSummaryCodec,
+    LogTemplatesCodec,
+    MarkdownOutlineCodec,
+    MetaTokensCodec,
+    OpenApiCodec,
+    PathDictRowsCodec,
+    PatternHashCodec,
+    SchemaRowsCodec,
+    SeparatorSegmentsCodec,
+    SessionDeltaCodec,
+    SidecarRefCodec,
+    TerraformPlanCodec,
+    TokenLzCodec,
+    ToolOutputCodec,
+    TreeDictCodec,
+    XmlPathCodec,
+)
 from kompressor.estimation import calculate_stats
 from kompressor.models import KompressorConfig, OptimizationResult
 from kompressor.prompts import build_system_prompt
@@ -39,11 +67,33 @@ class KompressorEngine:
             stats = calculate_stats(raw, raw, self.config)
             return OptimizationResult("none", raw, "", stats, True, {}, ["payload below optimization threshold"])
         codecs = [
+            SessionDeltaCodec(),
+            BlobRefCodec(),
+            SidecarRefCodec(),
+            OpenApiCodec(),
+            TerraformPlanCodec(),
+            K8sYamlCodec(),
+            CiOutputCodec(),
+            ToolOutputCodec(),
+            HtmlVisibleCodec(),
+            MarkdownOutlineCodec(),
+            CodeSymbolsCodec(),
+            DedupeCodec(),
+            SeparatorSegmentsCodec(),
+            LogSummaryCodec(),
+            LogTemplatesCodec(),
+            SchemaRowsCodec(),
+            TreeDictCodec(),
+            PathDictRowsCodec(),
             JsonTableCodec(self.config.delimiter_candidates),
             JsonPathCodec(),
             XmlPathCodec(),
+            MetaTokensCodec(),
+            TokenLzCodec(),
+            GrammarCodec(),
             PatternHashCodec(),
             BinaryCodec(),
+            ExtractiveTextCodec(),
         ]
         candidates = []
         for codec in codecs:
@@ -56,6 +106,8 @@ class KompressorEngine:
                     if restored != parsed:
                         continue
                 stats = calculate_stats(raw, result.payload, self.config)
+                if "[REDACTED_" in raw and "[REDACTED_" not in result.payload:
+                    continue
                 candidates.append((codec.name, result, stats))
             except Exception:
                 continue
@@ -83,6 +135,28 @@ class KompressorEngine:
         marker = str(metadata.get("marker", ""))
         if "json_table" in marker:
             return JsonTableCodec().decompress(payload, metadata)
+        if "schema_rows" in marker:
+            return SchemaRowsCodec().decompress(payload, metadata)
+        if "log_templates" in marker:
+            return LogTemplatesCodec().decompress(payload, metadata)
+        if "dedupe" in marker:
+            return DedupeCodec().decompress(payload, metadata)
+        if "separator_segments" in marker:
+            return SeparatorSegmentsCodec().decompress(payload, metadata)
+        if "meta_tokens" in marker:
+            return MetaTokensCodec().decompress(payload, metadata)
+        if "token_lz" in marker:
+            return TokenLzCodec().decompress(payload, metadata)
+        if "grammar" in marker:
+            return GrammarCodec().decompress(payload, metadata)
+        if "path_dict_rows" in marker:
+            return PathDictRowsCodec().decompress(payload, metadata)
+        if "tree_dict" in marker:
+            return TreeDictCodec().decompress(payload, metadata)
+        if "session_delta" in marker:
+            return SessionDeltaCodec().decompress(payload, metadata)
+        if "sidecar_ref" in marker:
+            return SidecarRefCodec().decompress(payload, metadata)
         if "pattern_hash" in marker:
             return PatternHashCodec().decompress(payload, metadata)
         if "binary" in marker:
