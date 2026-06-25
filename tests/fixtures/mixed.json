@@ -1,0 +1,11 @@
+[
+  {
+    "a": "x|y",
+    "b": "line\nbreak",
+    "c": null
+  },
+  {
+    "a": "unicode \u03c0",
+    "d": 3
+  }
+]

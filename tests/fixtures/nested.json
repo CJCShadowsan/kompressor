@@ -1,0 +1,12 @@
+{
+  "users": [
+    {
+      "id": "u1",
+      "roles": [
+        "admin",
+        "ops"
+      ]
+    }
+  ],
+  "ok": true
+}

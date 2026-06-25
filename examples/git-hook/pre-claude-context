@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+input="${1:-tests/fixtures/logs.json}"
+output="${2:-/tmp/kompressor-context.txt}"
+kompressor compress "$input" --harness generic --output "$output"
+echo "Wrote compressed LLM context to $output"

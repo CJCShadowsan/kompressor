@@ -1,0 +1,6 @@
+name: kompressor
+version: "0.1.0"
+description: "Kompressor structured-context compression middleware for Hermes model requests. Rewrites large structured user messages before provider dispatch."
+author: "Kompressor"
+middleware:
+  - llm_request
