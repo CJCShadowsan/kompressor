@@ -1,6 +1,6 @@
 # Lossless Token-Sequence Compression for Local-First LLM Contexts
 
-Craig Coates / Kompressor Project
+Chris Coates / Kompressor Project
 26 June 2026
 
 ## Abstract
