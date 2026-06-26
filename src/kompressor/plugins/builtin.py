@@ -28,7 +28,10 @@ class ClaudeKompressorPlugin(BaseKompressorPlugin):
         mode="anthropic-compatible-request-rewrite",
         hooks=("pre_user_input", "pre_tool_output", "messages_request"),
         transparent=True,
-        install_hint="Install as a Claude/Anthropic request middleware or run behind a Claude CLI/API wrapper.",
+        install_hint=(
+            "Use `kompressor claude-code install` for Claude Code / claudish shims, "
+            "or install as Anthropic request middleware where available."
+        ),
         notes=(
             "Injects decompression instructions into the system/developer side of the request "
             "when the host exposes it.",
