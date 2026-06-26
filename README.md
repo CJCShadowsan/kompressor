@@ -107,25 +107,58 @@ Implementation covers the first multi-harness release surface:
 - Secret detection/redaction
 - Benchmark command and documentation
 
-## Install for Hermes users
+## Installation
 
-Recommended end-user install:
+Kompressor requires Python 3.10 or newer. Choose the installer that matches how you want the `kompressor` CLI to be managed.
+
+### End-user CLI install
+
+Recommended with `uv`:
+
+```bash
+uv tool install kompressor
+kompressor hermes install --prove
+```
+
+Equivalent `pipx` install:
 
 ```bash
 pipx install kompressor
 kompressor hermes install --prove
 ```
 
-From a source checkout:
+One-off execution without installing a persistent tool:
+
+```bash
+uvx kompressor --help
+uvx kompressor hermes install --prove
+```
+
+### Install from a source checkout
+
+For local editable work with `uv`:
 
 ```bash
 git clone https://github.com/CJCShadowsan/kompressor.git
 cd kompressor
-python -m pip install -e .
+uv venv --python 3.11
+source .venv/bin/activate
+uv pip install -e '.[dev]'
 kompressor hermes install --prove
 ```
 
-After install, start a new Hermes session. Check status any time with:
+For local editable work with standard `pip`:
+
+```bash
+git clone https://github.com/CJCShadowsan/kompressor.git
+cd kompressor
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e '.[dev]'
+kompressor hermes install --prove
+```
+
+After installing the Hermes plugin, start a new Hermes session. Check status any time with:
 
 ```bash
 kompressor hermes status
@@ -134,13 +167,15 @@ kompressor hermes status
 ## Quickstart for development
 
 ```bash
-/Users/ccoates/.local/bin/python3.11 -m venv .venv
+uv venv --python 3.11
 source .venv/bin/activate
-python -m pip install -e '.[dev]'
+uv pip install -e '.[dev]'
 python -m pytest
 python -m ruff check .
 kompressor --help
 ```
+
+If you are not using `uv`, replace the environment and install steps with `python3.11 -m venv .venv` and `python -m pip install -e '.[dev]'`.
 
 ## CLI examples
 
