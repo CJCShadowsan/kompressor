@@ -9,6 +9,15 @@ from pathlib import Path
 import typer
 
 from kompressor import __version__
+from kompressor.anthropic_proxy import serve_anthropic_proxy
+from kompressor.claude_code import (
+    get_claude_code_status,
+    install_claude_code_shims,
+    prove_claude_code_shim,
+    run_claude_code_proxy,
+    run_claude_code_shim,
+    uninstall_claude_code_shims,
+)
 from kompressor.codecs.json_table import MARKER as JSON_TABLE_MARKER
 from kompressor.codecs.json_table import JsonTableCodec
 from kompressor.engine import KompressorEngine
@@ -35,9 +44,11 @@ app = typer.Typer(
 )
 plugin_app = typer.Typer(help="Inspect transparent harness plugins.", no_args_is_help=True)
 hermes_app = typer.Typer(help="Manage explicit Hermes compatibility integrations.", no_args_is_help=True)
+claude_code_app = typer.Typer(help="Manage Claude Code / claudish shim integrations.", no_args_is_help=True)
 hermes_patch_app = typer.Typer(help="Manage reversible Hermes source compatibility patches.", no_args_is_help=True)
 app.add_typer(plugin_app, name="plugin")
 app.add_typer(hermes_app, name="hermes")
+app.add_typer(claude_code_app, name="claude-code")
 hermes_app.add_typer(hermes_patch_app, name="patch")
 
 
@@ -252,6 +263,250 @@ def plugin_preflight(
         output.write_text(text, encoding="utf-8")
     else:
         typer.echo(text)
+
+
+def _parse_targets(target: str) -> tuple[str, ...]:
+    if target == "both":
+        return ("claude", "claudish")
+    if target in {"claude", "claudish"}:
+        return (target,)
+    raise typer.BadParameter("target must be one of: claude, claudish, both")
+
+
+def _echo_claude_code_status(status: dict[str, object]) -> None:
+    typer.echo("Kompressor:")
+    typer.echo(f"  version: {status.get('kompressor_version')}")
+    typer.echo("Binaries:")
+    typer.echo(f"  claude: {status.get('claude_binary')}")
+    typer.echo(f"  claudish: {status.get('claudish_binary')}")
+    typer.echo("Shims:")
+    typer.echo(f"  bin_dir: {status.get('bin_dir')}")
+    claude_installed = "yes" if status.get("claude_shim_installed") else "no"
+    claudish_installed = "yes" if status.get("claudish_shim_installed") else "no"
+    claude_proxy_installed = "yes" if status.get("claude_proxy_shim_installed") else "no"
+    claudish_proxy_installed = "yes" if status.get("claudish_proxy_shim_installed") else "no"
+    typer.echo(f"  kompressor-claude: {status.get('claude_shim')} installed={claude_installed}")
+    typer.echo(f"  kompressor-claudish: {status.get('claudish_shim')} installed={claudish_installed}")
+    typer.echo(f"  kompressor-claude-proxy: {status.get('claude_proxy_shim')} installed={claude_proxy_installed}")
+    typer.echo(f"  kompressor-claudish-proxy: {status.get('claudish_proxy_shim')} installed={claudish_proxy_installed}")
+    findings = status.get("native_hook_findings") if isinstance(status.get("native_hook_findings"), dict) else {}
+    typer.echo("Native Claude Code hooks:")
+    typer.echo(f"  recommended_mode: {findings.get('recommended_mode')}")
+    typer.echo(f"  prompt_replacement_supported: {'yes' if findings.get('prompt_replacement_supported') else 'no'}")
+    typer.echo(f"  reason: {findings.get('reason')}")
+
+
+@claude_code_app.command("status")
+def claude_code_status(
+    bin_dir: Path | None = typer.Option(None, "--bin-dir"),
+    config_dir: Path | None = typer.Option(None, "--config-dir"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Show Claude Code / claudish shim status and native-hook findings."""
+    status = get_claude_code_status(bin_dir, config_dir).to_dict()
+    if json_output:
+        typer.echo(json.dumps({"status": status}, indent=2, ensure_ascii=False))
+    else:
+        _echo_claude_code_status(status)
+
+
+@claude_code_app.command("install")
+def claude_code_install(
+    bin_dir: Path | None = typer.Option(None, "--bin-dir"),
+    config_dir: Path | None = typer.Option(None, "--config-dir"),
+    target: str = typer.Option("both", "--target", help="claude, claudish, or both"),
+    mode: str = typer.Option("shim", "--mode", help="shim or proxy"),
+    port: int = typer.Option(8765, "--port", help="Proxy port for --mode proxy wrappers."),
+    force: bool = typer.Option(False, "--force"),
+    prove: bool = typer.Option(False, "--prove"),
+    live: bool = typer.Option(
+        False,
+        "--live",
+        help="With --prove, invoke claude/claudish instead of structural proof only.",
+    ),
+    model: str | None = typer.Option(None, "--model", help="Model for claudish live proof, e.g. ollama@qwen2.5:3b."),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Install one-shot prompt-rewriting or Anthropic proxy shims for Claude Code and/or claudish."""
+    if mode not in {"shim", "proxy"}:
+        raise typer.BadParameter("mode must be shim or proxy")
+    try:
+        payload = install_claude_code_shims(
+            bin_dir=bin_dir,
+            config_dir=config_dir,
+            targets=_parse_targets(target),  # type: ignore[arg-type]
+            force=force,
+            mode=mode,
+            port=port,
+        )
+        proof_target = "claudish" if target in {"both", "claudish"} else "claude"
+        proof_payload = prove_claude_code_shim(target=proof_target, model=model, live=live) if prove else None
+    except RuntimeError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    if json_output:
+        typer.echo(json.dumps({**payload, "proof": proof_payload}, indent=2, ensure_ascii=False))
+        return
+    typer.echo(str(payload.get("message")))
+    for path in payload.get("installed", []):
+        typer.echo(f"  {path}")
+    _echo_claude_code_status(payload["status"])  # type: ignore[arg-type]
+    if proof_payload:
+        typer.echo("Proof:")
+        typer.echo(json.dumps(proof_payload, indent=2, ensure_ascii=False))
+        if not proof_payload.get("ok"):
+            raise typer.Exit(2)
+
+
+@claude_code_app.command("uninstall")
+def claude_code_uninstall(
+    bin_dir: Path | None = typer.Option(None, "--bin-dir"),
+    config_dir: Path | None = typer.Option(None, "--config-dir"),
+    target: str = typer.Option("both", "--target", help="claude, claudish, or both"),
+    mode: str = typer.Option("all", "--mode", help="shim, proxy, or all"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Remove Kompressor-managed Claude Code / claudish shims."""
+    payload = uninstall_claude_code_shims(
+        bin_dir=bin_dir,
+        config_dir=config_dir,
+        targets=_parse_targets(target),  # type: ignore[arg-type]
+        mode=mode,
+    )
+    if json_output:
+        typer.echo(json.dumps(payload, indent=2, ensure_ascii=False))
+        return
+    typer.echo(str(payload.get("message")))
+    for path in payload.get("removed", []):
+        typer.echo(f"  {path}")
+
+
+@claude_code_app.command("run")
+def claude_code_run(
+    context: Path,
+    target: str = typer.Option("claudish", "--target", help="claude or claudish"),
+    task: str = typer.Option("", "--task"),
+    model: str | None = typer.Option(None, "--model", help="Model for claudish, e.g. ollama@qwen2.5:3b."),
+    command: str | None = typer.Option(None, "--command", help="Override binary path for claude or claudish."),
+    output: Path | None = typer.Option(None, "--output", help="Write generated compressed prompt before invocation."),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Print generated command/prompt without invoking Claude Code.",
+    ),
+    allow_tools: bool = typer.Option(False, "--allow-tools", help="For claude target, do not force --tools ''."),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Compress a context file, then invoke claude or claudish with compressed stdin."""
+    if target not in {"claude", "claudish"}:
+        raise typer.BadParameter("target must be claude or claudish")
+    payload = run_claude_code_shim(
+        context,
+        target=target,  # type: ignore[arg-type]
+        task=task,
+        model=model,
+        command=command,
+        output=output,
+        dry_run=dry_run,
+        allow_tools=allow_tools,
+    )
+    if json_output:
+        typer.echo(json.dumps(payload, indent=2, ensure_ascii=False))
+        return
+    if dry_run:
+        typer.echo("Command: " + " ".join(str(part) for part in payload.get("command", [])))
+        typer.echo(str(payload.get("prompt", "")))
+        return
+    if payload.get("stdout"):
+        typer.echo(str(payload["stdout"]).rstrip())
+    if payload.get("stderr"):
+        typer.echo(str(payload["stderr"]).rstrip(), err=True)
+    if not payload.get("ok"):
+        raise typer.Exit(int(payload.get("returncode") or 1))
+
+
+@claude_code_app.command("proxy")
+def claude_code_proxy(
+    host: str = typer.Option("127.0.0.1", "--host"),
+    port: int = typer.Option(8765, "--port"),
+    upstream: str = typer.Option("https://api.anthropic.com", "--upstream"),
+    api_key: str | None = typer.Option(None, "--api-key"),
+    threshold_chars: int = typer.Option(512, "--threshold-chars"),
+    allow_sensitive: bool = typer.Option(False, "--allow-sensitive"),
+    redact: bool = typer.Option(False, "--redact"),
+) -> None:
+    """Serve an Anthropic-compatible request-rewriting proxy for Claude Code."""
+    typer.echo(f"Serving Kompressor Anthropic proxy on http://{host}:{port} -> {upstream}", err=True)
+    serve_anthropic_proxy(
+        host=host,
+        port=port,
+        upstream=upstream,
+        api_key=api_key,
+        threshold_chars=threshold_chars,
+        allow_sensitive=allow_sensitive,
+        redact=redact,
+    )
+
+
+@claude_code_app.command("run-proxy", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+def claude_code_run_proxy(
+    ctx: typer.Context,
+    target: str = typer.Option("claude", "--target", help="claude or claudish"),
+    port: int = typer.Option(8765, "--port"),
+    upstream: str = typer.Option("https://api.anthropic.com", "--upstream"),
+    model: str | None = typer.Option(None, "--model", help="Model for claudish."),
+    command: str | None = typer.Option(None, "--command", help="Override binary path for claude or claudish."),
+    allow_tools: bool = typer.Option(False, "--allow-tools", help="For claude target, do not force --tools ''."),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Start the proxy, route Claude Code through it, then stop the proxy."""
+    if target not in {"claude", "claudish"}:
+        raise typer.BadParameter("target must be claude or claudish")
+    payload = run_claude_code_proxy(
+        target=target,  # type: ignore[arg-type]
+        port=port,
+        upstream=upstream,
+        model=model,
+        command=command,
+        allow_tools=allow_tools,
+        args=tuple(ctx.args),
+    )
+    if json_output:
+        typer.echo(json.dumps(payload, indent=2, ensure_ascii=False))
+        return
+    if payload.get("stdout"):
+        typer.echo(str(payload["stdout"]).rstrip())
+    if payload.get("stderr"):
+        typer.echo(str(payload["stderr"]).rstrip(), err=True)
+    if not payload.get("ok"):
+        raise typer.Exit(int(payload.get("returncode") or 1))
+
+
+@claude_code_app.command("prove")
+def claude_code_prove(
+    target: str = typer.Option("claudish", "--target", help="claude or claudish"),
+    model: str | None = typer.Option(None, "--model", help="Model for claudish live proof, e.g. ollama@qwen2.5:3b."),
+    command: str | None = typer.Option(None, "--command", help="Override binary path for claude or claudish."),
+    live: bool = typer.Option(False, "--live", help="Invoke claude/claudish and compare the answer to the oracle."),
+    allow_tools: bool = typer.Option(False, "--allow-tools", help="For claude target, do not force --tools ''."),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Prove Claude Code shim prompt generation, optionally with a live claude/claudish call."""
+    if target not in {"claude", "claudish"}:
+        raise typer.BadParameter("target must be claude or claudish")
+    payload = prove_claude_code_shim(
+        target=target,  # type: ignore[arg-type]
+        model=model,
+        command=command,
+        live=live,
+        allow_tools=allow_tools,
+    )
+    if json_output:
+        typer.echo(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        typer.echo(str(payload.get("message")))
+        typer.echo(json.dumps(payload, indent=2, ensure_ascii=False))
+    if not payload.get("ok"):
+        raise typer.Exit(2)
 
 
 def _echo_patch_result(payload: dict[str, object], *, json_output: bool) -> None:

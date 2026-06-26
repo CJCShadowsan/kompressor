@@ -229,6 +229,31 @@ kompressor hermes status
 kompressor hermes prove
 ```
 
+Install Claude Code / claudish one-shot shims:
+
+```bash
+kompressor claude-code install --target both --mode shim --prove
+kompressor claude-code status
+kompressor claude-code prove
+kompressor claude-code run tests/fixtures/logs.json --target claudish --model ollama@qwen2.5:3b --task "Find auth failures"
+```
+
+Install Claude Code / claudish Anthropic request-proxy wrappers:
+
+```bash
+kompressor claude-code install --target both --mode proxy --port 8765
+kompressor-claude-proxy -p "Summarize this project"
+```
+
+Or run the proxy directly and point Claude Code at it:
+
+```bash
+kompressor claude-code proxy --port 8765 --upstream https://api.anthropic.com
+ANTHROPIC_BASE_URL=http://127.0.0.1:8765 claude -p "Summarize this project"
+```
+
+The proxy rewrites Anthropic `/v1/messages` requests before provider dispatch, compressing large user/tool-result text blocks while preserving tool schemas, assistant tool-use blocks, images, and non-text content. The one-shot shim remains useful for local/claudish stdin workflows. See `docs/claude-code-integration.md` for installation details and native hook API findings.
+
 ## Python API example
 
 ```python
