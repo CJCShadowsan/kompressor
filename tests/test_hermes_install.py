@@ -5,6 +5,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
+from kompressor import __version__
 from kompressor.cli import app
 from kompressor.hermes_install.installer import install_hermes_integration, uninstall_hermes_integration
 
@@ -76,6 +77,9 @@ def test_install_and_uninstall_hermes_plugin(tmp_path: Path, monkeypatch) -> Non
     assert result["changed"] is True
     assert (home / "plugins" / "kompressor" / "plugin.yaml").exists()
     assert (home / "plugins" / "kompressor" / "__init__.py").exists()
+    manifest = (home / "plugins" / "kompressor" / "plugin.yaml").read_text(encoding="utf-8")
+    assert f'version: "{__version__}"' in manifest
+    assert result["status"]["plugin_version"] == __version__
     config = json.loads((home / "plugins" / "kompressor" / "config.json").read_text())
     assert config["python_paths"]
     assert result["status"]["plugin_enabled"] is True

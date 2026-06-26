@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -119,7 +120,10 @@ def get_hermes_install_status(
 
 def _template_text(name: str) -> str:
     resource = resources.files("kompressor.hermes_install.plugin_template").joinpath(name)
-    return resource.read_text(encoding="utf-8")
+    text = resource.read_text(encoding="utf-8")
+    if name == "plugin.yaml":
+        text = re.sub(r'^version:\s*["\']?[^"\'\n]+["\']?$', f'version: "{__version__}"', text, flags=re.MULTILINE)
+    return text
 
 
 def _write_plugin_files(plugin_dir: Path, *, force: bool) -> bool:
