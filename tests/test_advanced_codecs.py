@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import base64
-import json
 
 from kompressor.codecs import (
     BlobRefCodec,
@@ -87,6 +86,6 @@ def test_engine_routes_specialized_payloads() -> None:
         },
     }
     result = KompressorEngine().optimize(openapi)
-    assert result.kind == "openapi"
-    assert not result.reversible
-    assert json.loads(json.dumps(result.to_dict()))
+    assert result.kind == "domain_table"
+    assert result.reversible
+    assert KompressorEngine().decompress(result.optimized_payload, result.metadata) == openapi

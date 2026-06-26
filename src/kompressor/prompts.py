@@ -36,7 +36,19 @@ def build_system_prompt(kind: str, metadata: dict[str, object] | None = None, ve
             "- T= contains log templates with {vN} placeholders.",
             "- R= contains [template_id, variables] rows; substitute variables into the template for exact logs.",
         ]
-    elif kind in {"meta_tokens", "token_lz", "separator_segments", "grammar", "path_dict_rows", "tree_dict"}:
+    elif kind in {
+        "meta_tokens",
+        "token_lz",
+        "separator_segments",
+        "grammar",
+        "path_dict_rows",
+        "tree_dict",
+        "shape_rows",
+        "atom_dict",
+        "xml_shape_rows",
+        "chunk_store",
+        "code_tokens",
+    }:
         extra = [
             f"For <kompressor:{kind}_v1>, the payload is exact reversible macro/dictionary compression.",
             "- Use dictionary/rule/reference sections to expand compact symbols when exact context matters.",
@@ -46,6 +58,12 @@ def build_system_prompt(kind: str, metadata: dict[str, object] | None = None, ve
         extra = [
             f"For <kompressor:{kind}_v1>, the payload is exact only with the referenced local base/sidecar metadata.",
             "- Treat hash/preview fields as evidence handles, not as full source content.",
+        ]
+    elif kind in {"transport_deflate", "domain_table"}:
+        extra = [
+            f"For <kompressor:{kind}_v1>, exact reconstruction requires local decompression "
+            "of embedded deflated content.",
+            "- Use the visible index/metadata for high-level reasoning only unless the runtime expands the payload.",
         ]
     elif kind == "pattern_hash":
         extra = [
