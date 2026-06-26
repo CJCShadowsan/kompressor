@@ -41,6 +41,15 @@ def _tokens(text: str) -> list[str]:
     return re.findall(r"\s+|[A-Za-z0-9_./:@=-]+|[^\w\s]", text, flags=re.UNICODE)
 
 
+def _token_cost(text: str) -> int:
+    try:
+        import tiktoken
+
+        return len(tiktoken.get_encoding("cl100k_base").encode(text))
+    except Exception:
+        return max(1, len(text) // 4)
+
+
 def _phrase_payload(marker: str, text: str, *, min_count: int = 3, max_entries: int = 96) -> CodecResult:
     toks = _tokens(text)
     if len(toks) < 80:
@@ -54,7 +63,11 @@ def _phrase_payload(marker: str, text: str, *, min_count: int = 3, max_entries: 
             phrase_text = "".join(phrase)
             if len(phrase_text) < 12:
                 continue
-            score = (count - 1) * len(phrase_text) - (len(phrase_text) + 12)
+            # Score by local tokenizer cost when available rather than raw
+            # characters.  This keeps the codec provider-neutral while making
+            # token_lz/meta-token selection sensitive to BPE boundaries.
+            marker_cost = _token_cost(f"§{len(candidates)}§")
+            score = (count - 1) * _token_cost(phrase_text) - (_token_cost(phrase_text) + count * marker_cost)
             if score > 20:
                 candidates.append((score, phrase, count))
     candidates.sort(reverse=True, key=lambda item: item[0])
@@ -192,10 +205,16 @@ class GrammarCodec(Codec):
     def compress(self, value: object) -> CodecResult:
         symbols = _tokens(_as_text(value))
         rules: list[tuple[str, str]] = []
-        for _ in range(48):
+        for _ in range(96):
             pairs = Counter(zip(symbols, symbols[1:], strict=False))
-            pair, count = pairs.most_common(1)[0] if pairs else (("", ""), 0)
-            if count < 3:
+            if not pairs:
+                break
+            pair, count = max(
+                pairs.items(),
+                key=lambda item: (item[1] - 1) * (_token_cost(item[0][0]) + _token_cost(item[0][1])),
+            )
+            gain = (count - 1) * (_token_cost(pair[0]) + _token_cost(pair[1]))
+            if count < 3 or gain <= _token_cost(_j(pair)) + 2:
                 break
             new = f"¤{len(rules)}¤"
             rules.append(pair)

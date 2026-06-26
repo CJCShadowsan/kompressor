@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from kompressor.codecs.base import Codec, CodecResult
+from kompressor.codecs.lossless_ext import _apply_column_transforms, _restore_column_transforms
 
 SCHEMA_ROWS_MARKER = "<kompressor:schema_rows_v1>"
 LOG_TEMPLATES_MARKER = "<kompressor:log_templates_v1>"
@@ -97,20 +98,18 @@ class SchemaRowsCodec(Codec):
                     64, max(2, len(rows) // 2)
                 ):
                     enum_maps[key] = {v: idx for idx, v in enumerate(unique)}
+        transforms, encoded_rows = _apply_column_transforms(variable_keys, [
+            [enum_maps[key][row.get(key)] if key in enum_maps else row.get(key) for key in variable_keys]
+            for row in rows
+        ])
         header = {
             "columns": variable_keys,
             "constants": constants,
             "enums": {k: vals for k, vals in ((k, list(m)) for k, m in enum_maps.items())},
+            "transforms": transforms,
         }
         lines = [SCHEMA_ROWS_MARKER, _j(header), "@rows"]
-        for row in rows:
-            cells: list[Any] = []
-            for key in variable_keys:
-                value = row.get(key)
-                if key in enum_maps:
-                    cells.append(enum_maps[key][value])
-                else:
-                    cells.append(value)
+        for cells in encoded_rows:
             lines.append(_j(cells))
         return CodecResult(
             "\n".join(lines),
@@ -129,8 +128,9 @@ class SchemaRowsCodec(Codec):
         constants: dict[str, Any] = header.get("constants", {})
         enum_values: dict[str, list[Any]] = header.get("enums", {})
         out = []
-        for line in lines[row_start:]:
-            values = json.loads(line)
+        encoded_rows = [json.loads(line) for line in lines[row_start:]]
+        decoded_rows = _restore_column_transforms(columns, encoded_rows, header.get("transforms", {}))
+        for values in decoded_rows:
             row = dict(constants)
             for key, value in zip(columns, values, strict=False):
                 row[key] = enum_values[key][value] if key in enum_values else value

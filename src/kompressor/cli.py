@@ -30,6 +30,7 @@ from kompressor.proxy import healthz
 app = typer.Typer(
     add_completion=False,
     help="Client-side LLM context optimization toolkit.",
+    invoke_without_command=True,
     no_args_is_help=True,
 )
 plugin_app = typer.Typer(help="Inspect transparent harness plugins.", no_args_is_help=True)

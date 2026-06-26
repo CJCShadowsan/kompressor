@@ -6,11 +6,15 @@ import json
 from typing import Any
 
 from kompressor.codecs import (
+    AtomDictCodec,
     BinaryCodec,
     BlobRefCodec,
+    ChunkStoreCodec,
     CiOutputCodec,
     CodeSymbolsCodec,
+    CodeTokensCodec,
     DedupeCodec,
+    DomainTableCodec,
     ExtractiveTextCodec,
     GrammarCodec,
     HtmlVisibleCodec,
@@ -27,12 +31,15 @@ from kompressor.codecs import (
     SchemaRowsCodec,
     SeparatorSegmentsCodec,
     SessionDeltaCodec,
+    ShapeRowsCodec,
     SidecarRefCodec,
     TerraformPlanCodec,
     TokenLzCodec,
     ToolOutputCodec,
+    TransportDeflateCodec,
     TreeDictCodec,
     XmlPathCodec,
+    XmlShapeRowsCodec,
 )
 from kompressor.estimation import calculate_stats
 from kompressor.models import KompressorConfig, OptimizationResult
@@ -78,13 +85,19 @@ class KompressorEngine:
             HtmlVisibleCodec(),
             MarkdownOutlineCodec(),
             CodeSymbolsCodec(),
+            DomainTableCodec(),
+            CodeTokensCodec(),
             DedupeCodec(),
+            ChunkStoreCodec(),
             SeparatorSegmentsCodec(),
             LogSummaryCodec(),
             LogTemplatesCodec(),
+            ShapeRowsCodec(),
             SchemaRowsCodec(),
             TreeDictCodec(),
             PathDictRowsCodec(),
+            AtomDictCodec(),
+            XmlShapeRowsCodec(),
             JsonTableCodec(self.config.delimiter_candidates),
             JsonPathCodec(),
             XmlPathCodec(),
@@ -92,6 +105,7 @@ class KompressorEngine:
             TokenLzCodec(),
             GrammarCodec(),
             PatternHashCodec(),
+            TransportDeflateCodec(self.config.enable_transport_compression),
             BinaryCodec(),
             ExtractiveTextCodec(),
         ]
@@ -101,6 +115,8 @@ class KompressorEngine:
                 continue
             try:
                 result = codec.compress(parsed)
+                if self.config.reversible_only and not result.reversible:
+                    continue
                 if result.reversible:
                     restored = codec.decompress(result.payload, result.metadata)
                     if restored != parsed:
@@ -137,6 +153,20 @@ class KompressorEngine:
             return JsonTableCodec().decompress(payload, metadata)
         if "schema_rows" in marker:
             return SchemaRowsCodec().decompress(payload, metadata)
+        if "shape_rows" in marker:
+            return ShapeRowsCodec().decompress(payload, metadata)
+        if "atom_dict" in marker:
+            return AtomDictCodec().decompress(payload, metadata)
+        if "xml_shape_rows" in marker:
+            return XmlShapeRowsCodec().decompress(payload, metadata)
+        if "transport_deflate" in marker:
+            return TransportDeflateCodec(True).decompress(payload, metadata)
+        if "chunk_store" in marker:
+            return ChunkStoreCodec().decompress(payload, metadata)
+        if "code_tokens" in marker:
+            return CodeTokensCodec().decompress(payload, metadata)
+        if "domain_table" in marker:
+            return DomainTableCodec().decompress(payload, metadata)
         if "log_templates" in marker:
             return LogTemplatesCodec().decompress(payload, metadata)
         if "dedupe" in marker:

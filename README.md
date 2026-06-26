@@ -8,33 +8,28 @@ Kompressor cannot modify any provider's internal tokenizer or pricing rules. Cha
 
 Latest local vNext mixed-strategy benchmark: `artifacts/bench/2026-06-25-vnext-strategies`.
 
-Latest reversible-strategy benchmark: `artifacts/bench/2026-06-25-reversible-strategies`.
+Latest lossless-suite benchmark: `artifacts/bench/2026-06-26-lossless-suite`.
 
-| Metric | Mixed strategy result | Reversible-only result |
+| Metric | Mixed strategy result | Prompt/externalized lossless result | Local-decode lossless result |
+|---|---:|---:|---:|
+| Payloads / cases benchmarked | 520 | 520 | 520 |
+| Strategies covered | mixed reversible + analytical | reversible-only, no lossy summaries | reversible-only + gated zlib/base85 local decode |
+| Median character savings | 64.13% | 76.2881% | 93.1039% |
+| Median `cl100k_base` token savings | 69.39% | 58.7480% | 88.8596% |
+| Negative `cl100k_base` token-savings cases | 0 | 0 | 0 |
+| Reversible round trips checked/passed | 80 / 80 | 520 / 520 | 520 / 520 |
+| Synthetic secret-redaction checks passed | 6 / 6 | not applicable | not applicable |
+
+Lossless-suite median `cl100k_base` token savings by selected strategy:
+
+| Lossless strategy | Cases | Median token savings |
 |---|---:|---:|
-| Payloads / cases benchmarked | 520 | 320 |
-| Strategies covered | mixed reversible + analytical | 8 reversible |
-| Median character savings | 64.13% | 65.28% |
-| p25 / p75 character savings | 50.20% / 90.82% | not reported |
-| Median `cl100k_base` token savings | 69.39% | 55.20% |
-| p25 / p75 `cl100k_base` token savings | 55.31% / 88.78% | not reported |
-| Negative character-savings cases | 0 | 0 in strategy medians |
-| Negative `cl100k_base` token-savings cases | 0 | 0 |
-| Reversible round trips checked/passed | 80 / 80 | 320 / 320 |
-| Synthetic secret-redaction checks passed | 6 / 6 | not applicable |
-
-Reversible-only median `cl100k_base` token savings by strategy:
-
-| Reversible strategy | Median token savings |
-|---|---:|
-| `sidecar_ref` | 97.73% |
-| `grammar` | 93.64% |
-| `session_delta` | 71.21% |
-| `meta_tokens` | 61.01% |
-| `path_dict_rows` | 49.39% |
-| `tree_dict` | 45.73% |
-| `separator_segments` | 22.73% |
-| `token_lz` | 9.07% |
+| `sidecar_ref` | 240 | 93.0385% |
+| `schema_rows` | 80 | 58.1317% |
+| `domain_table` | 80 | 34.6633% |
+| `shape_rows` | 40 | 24.9692% |
+| `token_lz` | 39 | 9.1837% |
+| `transport_deflate` (local-decode mode) | 280 | 71.0619% |
 
 Mixed-strategy median `cl100k_base` token savings by input kind:
 
@@ -63,17 +58,24 @@ The vNext strategy set combines:
 
 Reversible strategies:
 
-- `schema_rows`: typed columnar JSON rows with constant-column elision and enum dictionaries.
-- `meta_tokens`: LZ-style phrase dictionaries inspired by lossless meta-token compression.
-- `token_lz`: tokenizer-proxy repeated-span packing with exact local decompression.
-- `separator_segments`: exact dictionaries for repeated line/paragraph/document segments.
-- `grammar`: Re-Pair-style reversible grammar rules for repeated adjacent token pairs.
-- `path_dict_rows`: path dictionaries plus value rows for nested JSON-like records.
-- `tree_dict`: repeated-subtree dictionaries for JSON/YAML-like object trees.
-- `session_delta`: hash/base-backed exact deltas for repeated session context.
-- `sidecar_ref`: hash-backed local sidecars for very large immutable payloads.
-- `log_templates`: reversible log template/variable encoding.
-- `dedupe`: repeated-block references.
+- `shape_rows`: Generalized nested JSON/dict-of-dicts row encoding with path dictionaries and column transforms.
+- `schema_rows`: Typed columnar JSON rows with constant-column elision, enum dictionaries, integer sequences, and prefix transforms.
+- `domain_table`: Exact domain indexes with embedded deflated source for OpenAPI/Terraform/Kubernetes/HTML/Markdown-style payloads.
+- `xml_shape_rows`: Repeated XML sibling shape rows with exact parsed XML reconstruction.
+- `atom_dict`: Global atom/string dictionaries for repeated scalar strings and keys.
+- `chunk_store`: Repeated paragraph/line chunk dictionaries.
+- `code_tokens`: Exact Python token-stream serialization for syntax-aware source-code compression experiments.
+- `transport_deflate`: Explicitly gated zlib/base85 local-decode transport compression; disabled by default for prompt-readable mode.
+- `meta_tokens`: Token-cost-scored LZ-style phrase dictionaries inspired by lossless meta-token compression.
+- `token_lz`: Tokenizer-cost-aware repeated-span packing with exact local decompression.
+- `separator_segments`: Exact dictionaries for repeated line/paragraph/document segments.
+- `grammar`: Token-cost-scored Re-Pair-style reversible grammar rules for repeated adjacent token pairs.
+- `path_dict_rows`: Path dictionaries plus value rows for nested JSON-like records.
+- `tree_dict`: Repeated-subtree dictionaries for JSON/YAML-like object trees.
+- `session_delta`: Hash/base-backed exact deltas for repeated session context.
+- `sidecar_ref`: Hash-backed local sidecars for very large immutable payloads.
+- `log_templates`: Reversible log template/variable encoding.
+- `dedupe`: Repeated-block references.
 - Existing `json_table`, `json_path`, `xml_path`, `pattern_hash`, and `binary` fallbacks.
 
 Analytical/task-oriented strategies:
@@ -247,11 +249,18 @@ The patch is marker-bounded, backed up under `~/.kompressor/patches/hermes/`, sy
 
 Reversible/default-safe strategies:
 
-- `schema_rows`: Typed columnar JSON records with enum dictionaries and constant-column elision.
-- `meta_tokens`: LZ-style textual meta-token dictionaries.
-- `token_lz`: tokenizer-proxy repeated-span packing.
+- `shape_rows`: Generalized nested structure rows for homogeneous dict/list shapes.
+- `schema_rows`: Typed columnar JSON records with enum dictionaries, constants, integer sequences, and prefix transforms.
+- `domain_table`: Reversible domain index plus embedded deflated source for common structured documents.
+- `xml_shape_rows`: Repeated XML element shape rows.
+- `atom_dict`: Global repeated atom/string dictionaries.
+- `chunk_store`: Repeated paragraph/line chunk references.
+- `code_tokens`: Exact Python token stream representation.
+- `transport_deflate`: Gated zlib/base85 local-decode transport compression.
+- `meta_tokens`: Token-cost-scored textual meta-token dictionaries.
+- `token_lz`: Tokenizer-cost-aware repeated-span packing.
 - `separator_segments`: Repeated separator-delimited segment dictionaries.
-- `grammar`: Re-Pair-style reversible grammar rules.
+- `grammar`: Token-cost-scored reversible grammar rules.
 - `path_dict_rows`: Nested path dictionaries and value rows.
 - `tree_dict`: Repeated-subtree references for JSON-like trees.
 - `session_delta`: Base-context plus exact delta patches; requires local base metadata.

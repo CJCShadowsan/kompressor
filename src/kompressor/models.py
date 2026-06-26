@@ -33,6 +33,13 @@ CompressionKind = Literal[
     "dedupe",
     "extractive",
     "binary",
+    "shape_rows",
+    "atom_dict",
+    "xml_shape_rows",
+    "transport_deflate",
+    "chunk_store",
+    "code_tokens",
+    "domain_table",
     "none",
 ]
 
@@ -46,6 +53,8 @@ class KompressorConfig:
     minimum_chars_to_optimize: int = 0
     delimiter_candidates: tuple[str, ...] = ("|", "\t", "¦", "~")
     allow_expansion: bool = False
+    enable_transport_compression: bool = False
+    reversible_only: bool = False
 
     def __post_init__(self) -> None:
         if self.cost_per_million_input_usd < 0:
