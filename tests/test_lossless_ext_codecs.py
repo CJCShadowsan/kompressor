@@ -47,9 +47,11 @@ def test_atom_dict_roundtrips_repeated_strings() -> None:
 
 
 def test_xml_shape_rows_roundtrips_repeated_xml() -> None:
-    value = "<root>" + "".join(
-        f'<item kind="pod"><name>pod-{i}</name><ns>default</ns></item>' for i in range(8)
-    ) + "</root>"
+    value = (
+        "<root>"
+        + "".join(f'<item kind="pod"><name>pod-{i}</name><ns>default</ns></item>' for i in range(8))
+        + "</root>"
+    )
     result = _roundtrip(XmlShapeRowsCodec(), value)
     assert result.payload.startswith("<kompressor:xml_shape_rows_v1>")
 

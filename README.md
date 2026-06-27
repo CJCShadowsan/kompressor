@@ -91,6 +91,19 @@ Analytical/task-oriented strategies:
 - `dedupe`: repeated-block references.
 - Existing `json_path`, `xml_path`, `pattern_hash`, and `binary` fallbacks.
 
+## Context Gateway
+
+Kompressor now includes a local context gateway that combines Kompressor's verified codec engine with Headroom-like deployment ergonomics: OpenAI/Anthropic-compatible proxying, retrieval-backed originals, raw-text-free stats, agent wrappers, and offline proof/benchmark scripts.
+
+```bash
+kompressor gateway serve --host 127.0.0.1 --port 8787 --upstream https://api.openai.com --mode strict
+kompressor wrap agent claudish --print-only --json -- --model ollama@qwen2.5:3b
+python scripts/gateway_proof.py --out artifacts/proof/gateway-offline.json
+python scripts/gateway_benchmark.py --out artifacts/bench/gateway
+```
+
+The gateway is strict by default: prompt-readable reversible compression is allowed, retrieval-backed externalization requires retrieval support, local-decode compression is explicit, and lossy analytical summaries are opt-in. Gateway stats are character-count estimates unless provider usage metadata is explicitly collected. See `docs/context-gateway.md` and `docs/comparison-headroom.md`.
+
 ## Status
 
 Implementation covers the first multi-harness release surface:

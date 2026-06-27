@@ -154,5 +154,5 @@ def test_packaged_plugin_template_present() -> None:
     root = resources.files("kompressor.hermes_install.plugin_template")
     plugin_yaml = root.joinpath("plugin.yaml").read_text(encoding="utf-8")
     assert plugin_yaml.startswith("name: kompressor")
-    assert 'version: "0.4.0"' in plugin_yaml
+    assert 'version: "0.5.0"' in plugin_yaml
     assert "register(ctx)" in root.joinpath("__init__.py").read_text(encoding="utf-8")

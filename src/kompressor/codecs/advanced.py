@@ -98,10 +98,13 @@ class SchemaRowsCodec(Codec):
                     64, max(2, len(rows) // 2)
                 ):
                     enum_maps[key] = {v: idx for idx, v in enumerate(unique)}
-        transforms, encoded_rows = _apply_column_transforms(variable_keys, [
-            [enum_maps[key][row.get(key)] if key in enum_maps else row.get(key) for key in variable_keys]
-            for row in rows
-        ])
+        transforms, encoded_rows = _apply_column_transforms(
+            variable_keys,
+            [
+                [enum_maps[key][row.get(key)] if key in enum_maps else row.get(key) for key in variable_keys]
+                for row in rows
+            ],
+        )
         header = {
             "columns": variable_keys,
             "constants": constants,

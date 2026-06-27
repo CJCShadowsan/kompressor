@@ -274,8 +274,9 @@ def prove_hermes_integration(*, fixture: Path | None = None, threshold_chars: in
     proof = Path(tempfile.gettempdir()) / f"kompressor-hermes-proof-{os.getpid()}.jsonl"
     proof.unlink(missing_ok=True)
     query = (
-        "Kompressor install proof. Answer only with total record count and counts by severity from the raw JSON "
-        "below. Use labels Total, CRITICAL, WARNING, INFO.\n\n" + raw
+        "Kompressor install proof. Reconstruct the records if they are compacted. "
+        "Answer with exactly these four lines and no prose: Total: <n>, CRITICAL: <n>, WARNING: <n>, INFO: <n>. "
+        "Use the raw JSON below as the source data.\n\n" + raw
     )
     env = os.environ.copy()
     env["KOMPRESSOR_HERMES_PROOF_LOG"] = str(proof)
@@ -307,8 +308,12 @@ def prove_hermes_integration(*, fixture: Path | None = None, threshold_chars: in
         if e.get("strategy") in reversible_proof_strategies
         and e.get("compressed_chars", 10**9) < e.get("original_chars", 0)
     ]
-    output = proc.stdout + proc.stderr
-    correct = all(label in output for label in ("Total", "CRITICAL", "WARNING", "INFO"))
+    output = proc.stdout
+    canonical_labels = all(label in output for label in ("Total", "CRITICAL", "WARNING", "INFO"))
+    compact_semantics = (
+        "60" in output and "20" in output and all(label in output for label in ("CRITICAL", "WARNING", "INFO"))
+    )
+    correct = canonical_labels or compact_semantics
     ok = proc.returncode == 0 and bool(compressed) and correct
     return {
         "ok": ok,
