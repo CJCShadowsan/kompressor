@@ -168,6 +168,36 @@ def _rewrite_messages(messages: list[Any]) -> tuple[list[Any], list[dict[str, An
 def on_llm_request_middleware(*, request: dict[str, Any], **_: Any) -> dict[str, Any] | None:
     if not isinstance(request, dict):
         return None
+    try:
+        from kompressor.gateway.models import GatewayConfig
+        from kompressor.gateway.rewriter import GatewayRewriter
+
+        config = GatewayConfig(threshold_chars=_threshold(), redact=True)
+        next_request, telemetry = GatewayRewriter(config).rewrite_request(request)
+        if telemetry.rewrite_count:
+            for rewrite in telemetry.rewrites:
+                _write_proof(
+                    {
+                        "message_index": -1,
+                        "role": rewrite.source,
+                        "strategy": rewrite.strategy,
+                        "original_chars": rewrite.original_chars,
+                        "compressed_chars": rewrite.rewritten_chars,
+                        "saved_chars": rewrite.saved_chars,
+                        "reversibility_class": rewrite.reversibility_class,
+                        "stored_digest": rewrite.stored_digest,
+                        "gateway": True,
+                    }
+                )
+            return {
+                "request": next_request,
+                "name": "kompressor-hermes",
+                "source": "kompressor-gateway",
+                "reason": "gateway_context_rewritten",
+            }
+    except Exception:
+        if os.environ.get("KOMPRESSOR_HERMES_DISABLE_LEGACY_FALLBACK", "").lower() in {"1", "true", "yes", "on"}:
+            return None
     next_request = dict(request)
     messages = next_request.get("messages")
     if isinstance(messages, list):

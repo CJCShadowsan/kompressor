@@ -57,7 +57,9 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "cases": len(group),
             "round_trip_passed": sum(1 for r in group if r["round_trip_pass"]),
             "median_char_savings_pct": round(statistics.median(r["char_savings_pct"] for r in group), 4),
-            "median_token_savings_pct_cl100k": round(statistics.median(r["token_savings_pct_cl100k"] for r in group), 4),
+            "median_token_savings_pct_cl100k": round(
+                statistics.median(r["token_savings_pct_cl100k"] for r in group), 4
+            ),
             "negative_token_savings_count": sum(1 for r in group if r["token_savings_pct_cl100k"] < 0),
         }
 
@@ -66,7 +68,9 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "round_trip_passed": sum(1 for r in rows if r["round_trip_pass"]),
         "round_trip_pass_rate": round(sum(1 for r in rows if r["round_trip_pass"]) / len(rows), 4) if rows else 0,
         "median_char_savings_pct": round(statistics.median(r["char_savings_pct"] for r in rows), 4) if rows else 0,
-        "median_token_savings_pct_cl100k": round(statistics.median(r["token_savings_pct_cl100k"] for r in rows), 4) if rows else 0,
+        "median_token_savings_pct_cl100k": round(statistics.median(r["token_savings_pct_cl100k"] for r in rows), 4)
+        if rows
+        else 0,
         "negative_token_savings_count": sum(1 for r in rows if r["token_savings_pct_cl100k"] < 0),
         "by_kind": {kind: group_summary(group) for kind, group in sorted(by_kind.items())},
         "by_strategy": {strategy: group_summary(group) for strategy, group in sorted(by_strategy.items())},
@@ -77,7 +81,9 @@ def run(corpus: Path, out: Path) -> dict[str, Any]:
     out.mkdir(parents=True, exist_ok=True)
     engines = {
         "prompt_or_externalized_reversible": KompressorEngine(KompressorConfig(reversible_only=True)),
-        "local_decode_reversible": KompressorEngine(KompressorConfig(reversible_only=True, enable_transport_compression=True)),
+        "local_decode_reversible": KompressorEngine(
+            KompressorConfig(reversible_only=True, enable_transport_compression=True)
+        ),
     }
     all_summaries: dict[str, Any] = {}
     for mode, engine in engines.items():
@@ -113,10 +119,19 @@ def run(corpus: Path, out: Path) -> dict[str, Any]:
                     "warnings": result.warnings,
                 }
             )
-        (out / f"{mode}_results.jsonl").write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n", encoding="utf-8")
+        (out / f"{mode}_results.jsonl").write_text(
+            "\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n", encoding="utf-8"
+        )
         all_summaries[mode] = summarize(rows)
-    (out / "lossless_suite_summary.json").write_text(json.dumps(all_summaries, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    report = ["# Lossless Suite Benchmark", "", "Local tokenizer: `cl100k_base` via `tiktoken` when available; otherwise chars/4 proxy.", ""]
+    (out / "lossless_suite_summary.json").write_text(
+        json.dumps(all_summaries, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    report = [
+        "# Lossless Suite Benchmark",
+        "",
+        "Local tokenizer: `cl100k_base` via `tiktoken` when available; otherwise chars/4 proxy.",
+        "",
+    ]
     for mode, summary in all_summaries.items():
         report.extend(
             [
@@ -133,7 +148,9 @@ def run(corpus: Path, out: Path) -> dict[str, Any]:
             ]
         )
         for kind, payload in summary["by_kind"].items():
-            report.append(f"| {kind} | {payload['cases']} | {payload['median_token_savings_pct_cl100k']}% | {payload['round_trip_passed']} / {payload['cases']} |")
+            report.append(
+                f"| {kind} | {payload['cases']} | {payload['median_token_savings_pct_cl100k']}% | {payload['round_trip_passed']} / {payload['cases']} |"
+            )
         report.append("")
     while report and report[-1] == "":
         report.pop()

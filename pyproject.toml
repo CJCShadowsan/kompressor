@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kompressor"
-version = "0.4.0"
+version = "0.5.0"
 description = "Client-side LLM context optimization toolkit with harness plugins."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -40,9 +40,13 @@ dev = [
 anthropic = [
   "anthropic>=0.34",
 ]
+mcp = [
+  "mcp>=1.0",
+]
 
 [project.scripts]
 kompressor = "kompressor.cli:app"
+kompressor-mcp = "kompressor.mcp_server:main"
 
 [project.urls]
 Homepage = "https://github.com/CJCShadowsan/kompressor"

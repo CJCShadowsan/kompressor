@@ -124,7 +124,9 @@ def _apply_column_transforms(columns: list[str], rows: list[list[Any]]) -> tuple
     return transforms, out_rows
 
 
-def _restore_column_transforms(columns: list[str], rows: list[list[Any]], transforms: dict[str, Any]) -> list[list[Any]]:
+def _restore_column_transforms(
+    columns: list[str], rows: list[list[Any]], transforms: dict[str, Any]
+) -> list[list[Any]]:
     out = [list(row) for row in rows]
     for col_idx, name in enumerate(columns):
         transform = transforms.get(name)
@@ -150,7 +152,11 @@ class ShapeRowsCodec(Codec):
     def _candidate(self, value: object) -> tuple[str, list[str], list[object]] | None:
         if isinstance(value, dict):
             for key, child in value.items():
-                if isinstance(child, dict) and len(child) >= 3 and all(isinstance(v, dict | list) for v in child.values()):
+                if (
+                    isinstance(child, dict)
+                    and len(child) >= 3
+                    and all(isinstance(v, dict | list) for v in child.values())
+                ):
                     rows = list(child.values())
                     paths = _leaf_paths(rows[0])
                     if paths and all(_leaf_paths(row) == paths for row in rows):
@@ -356,7 +362,15 @@ class XmlShapeRowsCodec(Codec):
             else:
                 variable_paths.append(path)
         variable_rows = [[row[paths.index(path)] for path in variable_paths] for row in rows]
-        header = {"root_tag": root.tag, "root_attrib": root.attrib, "root_text": root.text or "", "child_template": ET.tostring(children[0], encoding="unicode"), "paths": variable_paths, "constants": constants, "tail": root.tail or ""}
+        header = {
+            "root_tag": root.tag,
+            "root_attrib": root.attrib,
+            "root_text": root.text or "",
+            "child_template": ET.tostring(children[0], encoding="unicode"),
+            "paths": variable_paths,
+            "constants": constants,
+            "tail": root.tail or "",
+        }
         payload = "\n".join([XML_SHAPE_MARKER, _j(header), "@rows", *(_j(row) for row in variable_rows)])
         return CodecResult(payload, True, {"marker": XML_SHAPE_MARKER}, [])
 
@@ -394,7 +408,12 @@ class TransportDeflateCodec(Codec):
         text = _as_text(value)
         body = base64.b85encode(zlib.compress(text.encode(), 9)).decode("ascii")
         payload = "\n".join([TRANSPORT_MARKER, f"encoding=zlib+b85 chars={len(text)}", body])
-        return CodecResult(payload, True, {"marker": TRANSPORT_MARKER, "mode": "local_decode", "original_type": type(value).__name__}, ["requires local runtime decompression before model reasoning"])
+        return CodecResult(
+            payload,
+            True,
+            {"marker": TRANSPORT_MARKER, "mode": "local_decode", "original_type": type(value).__name__},
+            ["requires local runtime decompression before model reasoning"],
+        )
 
     def decompress(self, payload: str, metadata: dict[str, Any]) -> object:
         body = payload.split("\n", 2)[2]
@@ -447,7 +466,11 @@ class CodeTokensCodec(Codec):
     name = "code_tokens"
 
     def can_handle(self, value: object) -> bool:
-        return isinstance(value, str) and len(value.splitlines()) >= 20 and bool(re.search(r"^\s*(def|class|import|from)\b", value, re.M))
+        return (
+            isinstance(value, str)
+            and len(value.splitlines()) >= 20
+            and bool(re.search(r"^\s*(def|class|import|from)\b", value, re.M))
+        )
 
     def compress(self, value: object) -> CodecResult:
         if not isinstance(value, str):
@@ -456,11 +479,17 @@ class CodeTokensCodec(Codec):
             toks = list(tokenize.tokenize(BytesIO(value.encode()).readline))
         except tokenize.TokenError:
             return CodecResult(value, True, {"marker": CODE_TOKENS_MARKER}, ["tokenization failed"])
-        strings = [t.string for t in toks if t.type not in {tokenize.ENCODING, tokenize.ENDMARKER} and len(t.string) >= 3]
+        strings = [
+            t.string for t in toks if t.type not in {tokenize.ENCODING, tokenize.ENDMARKER} and len(t.string) >= 3
+        ]
         counts = Counter(strings)
         atoms = [s for s, c in counts.most_common(128) if c >= 2]
         atom_ids = {s: f"${i}" for i, s in enumerate(atoms)}
-        rows = [[t.type, atom_ids.get(t.string, t.string), t.start, t.end, t.line] for t in toks if t.type != tokenize.ENCODING]
+        rows = [
+            [t.type, atom_ids.get(t.string, t.string), t.start, t.end, t.line]
+            for t in toks
+            if t.type != tokenize.ENCODING
+        ]
         header = {"atoms": {v: k for k, v in atom_ids.items()}}
         payload = "\n".join([CODE_TOKENS_MARKER, _j(header), "rows=" + _j(rows)])
         return CodecResult(payload, True, {"marker": CODE_TOKENS_MARKER}, [])
@@ -485,7 +514,11 @@ class DomainTableCodec(Codec):
         text = _as_text(value)
         if isinstance(value, dict) and ("openapi" in value or "swagger" in value or "resource_changes" in value):
             return True
-        return isinstance(value, str) and any(h in text for h in ("apiVersion:", "kind:", "metadata:", "# ", "<html", "<body")) and len(text) >= 400
+        return (
+            isinstance(value, str)
+            and any(h in text for h in ("apiVersion:", "kind:", "metadata:", "# ", "<html", "<body"))
+            and len(text) >= 400
+        )
 
     def compress(self, value: object) -> CodecResult:
         # Domain codecs here stay exact by combining a compact analytical index
@@ -496,16 +529,33 @@ class DomainTableCodec(Codec):
         if isinstance(value, dict) and isinstance(value.get("paths"), dict):
             for path, methods in value.get("paths", {}).items():
                 if isinstance(methods, dict):
-                    facts.extend(f"{m.upper()} {path}" for m in methods if m.lower() in {"get", "post", "put", "patch", "delete"})
+                    facts.extend(
+                        f"{m.upper()} {path}" for m in methods if m.lower() in {"get", "post", "put", "patch", "delete"}
+                    )
         elif isinstance(value, dict) and isinstance(value.get("resource_changes"), list):
             for rc in value["resource_changes"][:200]:
                 if isinstance(rc, dict):
-                    facts.append(f"{rc.get('address')} {rc.get('type')} {((rc.get('change') or {}).get('actions') if isinstance(rc.get('change'), dict) else '')}")
+                    facts.append(
+                        f"{rc.get('address')} {rc.get('type')} {((rc.get('change') or {}).get('actions') if isinstance(rc.get('change'), dict) else '')}"
+                    )
         else:
-            facts.extend(line for line in text.splitlines() if line.lstrip().startswith(("apiVersion", "kind", "name:", "#", "<title", "<h1", "<h2")))
+            facts.extend(
+                line
+                for line in text.splitlines()
+                if line.lstrip().startswith(("apiVersion", "kind", "name:", "#", "<title", "<h1", "<h2"))
+            )
         sidecar = base64.b85encode(zlib.compress(text.encode(), 9)).decode("ascii")
         payload = "\n".join([DOMAIN_REVERSIBLE_MARKER, "@index", *facts[:240], "@deflate_b85", sidecar])
-        return CodecResult(payload, True, {"marker": DOMAIN_REVERSIBLE_MARKER, "mode": "self_contained_deflate", "original_type": type(value).__name__}, ["exact reconstruction uses embedded deflated source"])
+        return CodecResult(
+            payload,
+            True,
+            {
+                "marker": DOMAIN_REVERSIBLE_MARKER,
+                "mode": "self_contained_deflate",
+                "original_type": type(value).__name__,
+            },
+            ["exact reconstruction uses embedded deflated source"],
+        )
 
     def decompress(self, payload: str, metadata: dict[str, Any]) -> object:
         body = payload.split("@deflate_b85\n", 1)[1]

@@ -21,6 +21,12 @@ from kompressor.claude_code import (
 from kompressor.codecs.json_table import MARKER as JSON_TABLE_MARKER
 from kompressor.codecs.json_table import JsonTableCodec
 from kompressor.engine import KompressorEngine
+from kompressor.gateway.http import serve_gateway
+from kompressor.gateway.models import GatewayConfig
+from kompressor.gateway.rewriter import GatewayRewriter
+from kompressor.gateway.stats import GatewayStats
+from kompressor.gateway.store import OriginalStore
+from kompressor.gateway.wrap import build_wrap_plan, print_cursor_settings, run_wrapped_agent
 from kompressor.harnesses import get_harness_adapter
 from kompressor.hermes_install import (
     get_hermes_install_status,
@@ -46,9 +52,13 @@ plugin_app = typer.Typer(help="Inspect transparent harness plugins.", no_args_is
 hermes_app = typer.Typer(help="Manage explicit Hermes compatibility integrations.", no_args_is_help=True)
 claude_code_app = typer.Typer(help="Manage Claude Code / claudish shim integrations.", no_args_is_help=True)
 hermes_patch_app = typer.Typer(help="Manage reversible Hermes source compatibility patches.", no_args_is_help=True)
+gateway_app = typer.Typer(help="Serve and inspect the Kompressor context gateway.", no_args_is_help=True)
+wrap_app = typer.Typer(help="Launch agents through Kompressor Gateway.", no_args_is_help=True)
 app.add_typer(plugin_app, name="plugin")
 app.add_typer(hermes_app, name="hermes")
 app.add_typer(claude_code_app, name="claude-code")
+app.add_typer(gateway_app, name="gateway")
+app.add_typer(wrap_app, name="wrap")
 hermes_app.add_typer(hermes_patch_app, name="patch")
 
 
@@ -697,6 +707,115 @@ def hermes_patch_prove() -> None:
         "Then verify /tmp/kompressor-hermes-native-proof.jsonl contains strategy=json_table "
         "and compressed_chars < original_chars."
     )
+
+
+@gateway_app.command("serve")
+def gateway_serve(
+    host: str = typer.Option("127.0.0.1", "--host"),
+    port: int = typer.Option(8787, "--port"),
+    upstream: str = typer.Option("https://api.openai.com", "--upstream"),
+    api_key: str | None = typer.Option(None, "--api-key"),
+    mode: str = typer.Option("strict", "--mode", help="strict, externalized, local_decode, or lossy_allowed"),
+    store_dir: Path | None = typer.Option(None, "--store-dir"),
+    threshold_chars: int = typer.Option(512, "--threshold-chars"),
+    allow_sensitive: bool = typer.Option(False, "--allow-sensitive"),
+    redact: bool = typer.Option(False, "--redact"),
+    output_shaping: bool = typer.Option(False, "--output-shaping"),
+) -> None:
+    """Serve a multi-provider OpenAI/Anthropic-compatible context gateway."""
+    if mode not in {"strict", "externalized", "local_decode", "lossy_allowed"}:
+        raise typer.BadParameter("mode must be strict, externalized, local_decode, or lossy_allowed")
+    config = GatewayConfig(
+        mode=mode,  # type: ignore[arg-type]
+        store_dir=str(store_dir) if store_dir else None,
+        threshold_chars=threshold_chars,
+        allow_sensitive=allow_sensitive,
+        redact=redact,
+        output_shaping=output_shaping,
+    )
+    typer.echo(f"Serving Kompressor Gateway on http://{host}:{port} -> {upstream}", err=True)
+    serve_gateway(host=host, port=port, upstream=upstream, api_key=api_key, config=config)
+
+
+@gateway_app.command("rewrite")
+def gateway_rewrite(
+    path: Path,
+    mode: str = typer.Option("strict", "--mode"),
+    store_dir: Path | None = typer.Option(None, "--store-dir"),
+    threshold_chars: int = typer.Option(0, "--threshold-chars"),
+    json_output: bool = typer.Option(True, "--json/--no-json"),
+) -> None:
+    """Rewrite an OpenAI/Anthropic request JSON file and print telemetry."""
+    request = json.loads(path.read_text(encoding="utf-8"))
+    config = GatewayConfig(mode=mode, store_dir=str(store_dir) if store_dir else None, threshold_chars=threshold_chars)  # type: ignore[arg-type]
+    rewritten, telemetry = GatewayRewriter(config).rewrite_request(request)
+    payload = {"request": rewritten, "telemetry": telemetry.to_dict()}
+    typer.echo(json.dumps(payload, indent=2, ensure_ascii=False) if json_output else str(payload))
+
+
+@gateway_app.command("stats")
+def gateway_stats(
+    store_dir: Path | None = typer.Option(None, "--store-dir"), json_output: bool = typer.Option(False, "--json")
+) -> None:
+    """Show raw-text-free gateway savings statistics."""
+    store = OriginalStore(store_dir)
+    payload = GatewayStats(store.root / "stats.json").load()
+    if json_output:
+        typer.echo(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        typer.echo(f"requests: {payload['requests']}")
+        typer.echo(f"rewrites: {payload['rewrites']}")
+        typer.echo(f"saved_chars: {payload['saved_chars']}")
+        typer.echo(payload["estimator"])
+
+
+@gateway_app.command("retrieve")
+def gateway_retrieve(
+    digest: str,
+    store_dir: Path | None = typer.Option(None, "--store-dir"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Retrieve an exact original payload by digest from the local store."""
+    store = OriginalStore(store_dir)
+    text = store.get_text(digest)
+    if json_output:
+        typer.echo(
+            json.dumps({"digest": digest, "content": text, "metadata": store.get_metadata(digest).to_dict()}, indent=2)
+        )
+    else:
+        typer.echo(text)
+
+
+@wrap_app.command("settings")
+def wrap_settings(gateway_url: str = typer.Option("http://127.0.0.1:8787", "--gateway-url")) -> None:
+    """Print manual settings for GUI agents such as Cursor."""
+    typer.echo(json.dumps(print_cursor_settings(gateway_url), indent=2))
+
+
+@wrap_app.command("agent", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+def wrap_agent(
+    ctx: typer.Context,
+    agent: str = typer.Argument(..., help="claude, claudish, codex, aider, or opencode"),
+    gateway_url: str = typer.Option("http://127.0.0.1:8787", "--gateway-url"),
+    print_only: bool = typer.Option(False, "--print-only"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Launch an agent with provider base URLs pointed at an existing gateway."""
+    plan = build_wrap_plan(agent, gateway_url=gateway_url, args=tuple(ctx.args))
+    if print_only:
+        payload = {"agent": plan.agent, "command": plan.command, "settings": plan.settings}
+        typer.echo(json.dumps(payload, indent=2) if json_output else " ".join(plan.command))
+        return
+    payload = run_wrapped_agent(agent, gateway_url=gateway_url, args=tuple(ctx.args))
+    if json_output:
+        typer.echo(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        if payload.get("stdout"):
+            typer.echo(str(payload["stdout"]).rstrip())
+        if payload.get("stderr"):
+            typer.echo(str(payload["stderr"]).rstrip(), err=True)
+    if not payload.get("ok"):
+        raise typer.Exit(int(payload.get("returncode") or 1))
 
 
 @app.command()
