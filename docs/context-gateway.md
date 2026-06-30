@@ -28,9 +28,16 @@ Supported proxy paths:
 - `POST /v1/messages`
 - `POST /v1/chat/completions`
 - `POST /v1/responses`
+- Nested compatibility routes ending in `/messages`, `/chat/completions`, or `/responses`
 - `GET /v1/kompressor/retrieve/<sha256>`
 - `GET /v1/kompressor/stats`
 - `GET /healthz`
+
+For Codex, the gateway is transparent only when Codex is actually configured to
+send model requests through an OpenAI-compatible base URL that reaches the
+gateway. MCP tools and prompt hooks are useful for retrieval, stats, and
+explicit compression, but they do not replace the prompt in stock Codex GUI/CLI
+ChatGPT-auth sessions.
 
 ## Rewrite proof
 

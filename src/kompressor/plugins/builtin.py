@@ -94,9 +94,14 @@ class CodexKompressorPlugin(BaseKompressorPlugin):
         entrypoint="kompressor.plugins.builtin:CodexKompressorPlugin",
         mode="codex-wrapper-or-openai-middleware",
         hooks=("pre_user_input", "pre_tool_output", "responses_request"),
-        transparent=True,
+        transparent=False,
         install_hint=(
-            "Install as a Codex/OpenAI-compatible middleware or launch Codex through a Kompressor wrapper shim."
+            "Use as Codex/OpenAI-compatible request middleware or a one-shot wrapper. Stock Codex GUI/CLI "
+            "ChatGPT-auth sessions do not currently expose a prompt-replacement hook."
         ),
-        notes=("Codex packaging uses developer instructions plus compressed user input.",),
+        notes=(
+            "Codex packaging uses developer instructions plus compressed user input.",
+            "Full-session transparency requires a request-rewrite/base-url integration that actually intercepts "
+            "model requests.",
+        ),
     )

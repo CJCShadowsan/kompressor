@@ -19,7 +19,7 @@ Every supported harness has a plugin entrypoint:
 | openai | `kompressor-openai` | `kompressor.plugins.builtin:OpenAIKompressorPlugin` | OpenAI-compatible middleware/base-url proxy |
 | gemini | `kompressor-gemini` | `kompressor.plugins.builtin:GeminiKompressorPlugin` | Gemini client middleware |
 | hermes | `kompressor-hermes` | `kompressor.plugins.builtin:HermesKompressorPlugin` | native agent pre-message/pre-tool-result hook |
-| codex | `kompressor-codex` | `kompressor.plugins.builtin:CodexKompressorPlugin` | Codex wrapper or OpenAI-compatible middleware |
+| codex | `kompressor-codex` | `kompressor.plugins.builtin:CodexKompressorPlugin` | Codex one-shot wrapper or request middleware |
 
 Inspect them locally:
 
@@ -83,16 +83,30 @@ plugin = get_plugin("claude", threshold_chars=512)
 request = plugin.prepare_request({"messages": [{"role": "user", "content": large_payload}]})
 ```
 
-## OpenAI / Codex transparent plugin path
+## OpenAI transparent plugin path
 
-OpenAI-compatible harnesses should install the plugin as middleware or route through a base-url proxy. Codex can use the Codex plugin directly or the OpenAI plugin when operating as an OpenAI-compatible client.
+OpenAI-compatible harnesses should install the plugin as middleware or route through a base-url proxy.
 
 ```python
 from kompressor.plugins import get_plugin
 
-plugin = get_plugin("codex", threshold_chars=512)
-prepared = plugin.prepare_user_input(large_payload, task="Review this log")
+plugin = get_plugin("openai", threshold_chars=512)
+request = plugin.prepare_request({"messages": [{"role": "user", "content": large_payload}]})
 ```
+
+## Codex integration status
+
+`CodexKompressorPlugin` can package compressed input for explicit one-shot use, and
+OpenAI-compatible Codex deployments can be routed through the gateway when their
+model requests use `/v1/responses`, `/v1/chat/completions`, or `/v1/messages`.
+
+Stock Codex GUI/CLI ChatGPT-auth sessions are different: installing an MCP server
+or registering a user-prompt hook does not, by itself, replace the prompt that
+Codex sends to the model. The current Codex `UserPromptSubmit` hook can add
+context or block a prompt, but it cannot mutate the submitted prompt, so it cannot
+transparently reduce input tokens for every session turn. For that path,
+Kompressor needs a real request-rewrite/base-url integration that is proven by
+gateway stats before it should be called transparent.
 
 ## Gemini transparent plugin path
 

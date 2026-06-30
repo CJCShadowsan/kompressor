@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 
 
 def test_gateway_proof_script(tmp_path):
     out = tmp_path / "proof.json"
     proc = subprocess.run(
-        ["./.venv/bin/python", "scripts/gateway_proof.py", "--out", str(out)],
+        [sys.executable, "scripts/gateway_proof.py", "--out", str(out)],
         text=True,
         capture_output=True,
         check=False,
@@ -20,7 +21,7 @@ def test_gateway_proof_script(tmp_path):
 
 def test_gateway_benchmark_script(tmp_path):
     proc = subprocess.run(
-        ["./.venv/bin/python", "scripts/gateway_benchmark.py", "--out", str(tmp_path)],
+        [sys.executable, "scripts/gateway_benchmark.py", "--out", str(tmp_path)],
         text=True,
         capture_output=True,
         check=False,
