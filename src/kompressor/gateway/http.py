@@ -28,6 +28,13 @@ HOP_BY_HOP_HEADERS = {
 }
 
 
+def _should_rewrite_route(route: str) -> bool:
+    route = route.rstrip("/")
+    return route in {"/v1/messages", "/v1/chat/completions", "/v1/responses"} or route.endswith(
+        ("/messages", "/chat/completions", "/responses")
+    )
+
+
 class KompressorGatewayServer(ThreadingHTTPServer):
     upstream: str
     api_key: str | None
@@ -103,7 +110,7 @@ def create_handler() -> type[BaseHTTPRequestHandler]:
                 headers["authorization"] = f"Bearer {self.server.api_key}"
                 headers["x-api-key"] = self.server.api_key
             route = urlsplit(self.path).path
-            if self.command == "POST" and route in {"/v1/messages", "/v1/chat/completions", "/v1/responses"} and body:
+            if self.command == "POST" and _should_rewrite_route(route) and body:
                 try:
                     payload = json.loads(body.decode("utf-8"))
                     rewriter = GatewayRewriter(self.server.config, self.server.store)

@@ -305,6 +305,12 @@ Plugins expose `prepare_user_input`, `prepare_tool_output`, and `prepare_request
 
 See `docs/plugins.md` for hook placement and integration guidance.
 
+Codex note: `kompressor-codex` is explicit packaging unless Codex is routed
+through a request-rewrite/base-url integration that the gateway can observe.
+Installing an MCP server or prompt hook alone does not transparently shrink every
+stock Codex GUI/CLI ChatGPT-auth turn, because those hooks cannot replace the
+submitted prompt.
+
 ## Hermes Codex compatibility patch
 
 Kompressor never edits Hermes during package installation. For Hermes versions whose Codex app-server runtime bypasses `llm_request` middleware, use the explicit reversible patch command:
