@@ -9,7 +9,7 @@ import httpx
 from typer.testing import CliRunner
 
 from kompressor.cli import app
-from kompressor.gateway.http import create_gateway_server
+from kompressor.gateway.http import _should_rewrite_route, create_gateway_server
 from kompressor.gateway.models import GatewayConfig
 from kompressor.gateway.policy import classify_result, decide_gateway_use
 from kompressor.gateway.rewriter import GatewayRewriter
@@ -64,9 +64,11 @@ def test_gateway_rewrites_openai_request_and_stores_original(tmp_path: Path) -> 
     assert OriginalStore(tmp_path).get_text(digest) == request["messages"][0]["content"]
 
 
-def test_gateway_rewrites_anthropic_tool_result() -> None:
+def test_gateway_rewrites_anthropic_tool_result(tmp_path: Path) -> None:
     request = {"system": "s", "messages": [{"role": "user", "content": [{"type": "tool_result", "content": _rows()}]}]}
-    rewritten, telemetry = GatewayRewriter(GatewayConfig(threshold_chars=0)).rewrite_request(request)
+    rewritten, telemetry = GatewayRewriter(GatewayConfig(store_dir=str(tmp_path), threshold_chars=0)).rewrite_request(
+        request
+    )
     assert telemetry.request_format == "anthropic"
     assert telemetry.rewrite_count == 1
     assert rewritten["messages"][0]["content"][0]["content"] != request["messages"][0]["content"][0]["content"]
@@ -91,6 +93,11 @@ def test_gateway_policy_rejects_lossy_by_default() -> None:
     assert decision.allowed is False
     assert decision.reason == "lossy_not_allowed"
     assert classify_result(result) == "lossy_analytical"
+
+
+def test_gateway_rewrites_chatgpt_backend_response_routes() -> None:
+    assert _should_rewrite_route("/backend-api/responses")
+    assert _should_rewrite_route("/backend-api/codex/responses")
 
 
 def test_wrap_plan_for_claudish_points_to_gateway() -> None:
