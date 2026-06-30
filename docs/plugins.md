@@ -108,6 +108,19 @@ transparently reduce input tokens for every session turn. For that path,
 Kompressor needs a real request-rewrite/base-url integration that is proven by
 gateway stats before it should be called transparent.
 
+Kompressor exposes a host-facing request-rewrite hook command for clients that
+do have a true pre-dispatch model-request hook:
+
+```bash
+kompressor hook request-rewrite request.json --store-dir ~/.kompressor/store
+cat request.json | kompressor hook request-rewrite - --request-only
+```
+
+The command accepts either a raw request JSON object or an envelope with the
+request under `request` or `body`, then returns `{decision, request, telemetry}`.
+Hosts should send the returned `request` to the provider only when they trust the
+hook and can prove `telemetry.rewrite_count > 0` on representative traffic.
+
 ## Gemini transparent plugin path
 
 Gemini clients should use `GeminiKompressorPlugin` before `generate_content` calls so instructions can be placed in `system_instruction` and compressed payload in `contents`.

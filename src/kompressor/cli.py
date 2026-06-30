@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import sys
 from pathlib import Path
 
 import typer
@@ -39,6 +40,7 @@ from kompressor.hermes_patch import (
     get_codex_bridge_status,
     uninstall_codex_bridge_patch,
 )
+from kompressor.hooks import request_rewrite_hook
 from kompressor.plugins import available_plugins, get_plugin, plugin_manifests
 from kompressor.proxy import healthz
 
@@ -54,11 +56,13 @@ claude_code_app = typer.Typer(help="Manage Claude Code / claudish shim integrati
 hermes_patch_app = typer.Typer(help="Manage reversible Hermes source compatibility patches.", no_args_is_help=True)
 gateway_app = typer.Typer(help="Serve and inspect the Kompressor context gateway.", no_args_is_help=True)
 wrap_app = typer.Typer(help="Launch agents through Kompressor Gateway.", no_args_is_help=True)
+hook_app = typer.Typer(help="Run host-facing Kompressor hook entrypoints.", no_args_is_help=True)
 app.add_typer(plugin_app, name="plugin")
 app.add_typer(hermes_app, name="hermes")
 app.add_typer(claude_code_app, name="claude-code")
 app.add_typer(gateway_app, name="gateway")
 app.add_typer(wrap_app, name="wrap")
+app.add_typer(hook_app, name="hook")
 hermes_app.add_typer(hermes_patch_app, name="patch")
 
 
@@ -273,6 +277,36 @@ def plugin_preflight(
         output.write_text(text, encoding="utf-8")
     else:
         typer.echo(text)
+
+
+@hook_app.command("request-rewrite")
+def hook_request_rewrite(
+    path: Path | None = typer.Argument(None, help="Request JSON file, hook envelope JSON file, or '-' for stdin."),
+    mode: str = typer.Option("strict", "--mode"),
+    store_dir: Path | None = typer.Option(None, "--store-dir"),
+    threshold_chars: int = typer.Option(512, "--threshold-chars"),
+    allow_sensitive: bool = typer.Option(False, "--allow-sensitive"),
+    redact: bool = typer.Option(False, "--redact"),
+    request_only: bool = typer.Option(False, "--request-only", help="Print only the rewritten request JSON."),
+) -> None:
+    """Rewrite a model request for hosts with request-rewrite hooks."""
+    if mode not in {"strict", "externalized", "local_decode", "lossy_allowed"}:
+        raise typer.BadParameter("mode must be strict, externalized, local_decode, or lossy_allowed")
+    text = sys.stdin.read() if path is None or str(path) == "-" else path.read_text(encoding="utf-8")
+    if not text.strip():
+        raise typer.BadParameter("request JSON is required")
+    payload = json.loads(text)
+    if not isinstance(payload, dict):
+        raise typer.BadParameter("request JSON must be an object")
+    config = GatewayConfig(
+        mode=mode,  # type: ignore[arg-type]
+        store_dir=str(store_dir) if store_dir else None,
+        threshold_chars=threshold_chars,
+        allow_sensitive=allow_sensitive,
+        redact=redact,
+    )
+    result = request_rewrite_hook(payload, config)
+    typer.echo(json.dumps(result["request"] if request_only else result, indent=2, ensure_ascii=False))
 
 
 def _parse_targets(target: str) -> tuple[str, ...]:
