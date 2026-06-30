@@ -1,3 +1,5 @@
+import json
+
 from typer.testing import CliRunner
 
 from kompressor.cli import app
@@ -59,6 +61,50 @@ def test_plugin_preflight() -> None:
     assert result.exit_code == 0
     assert "KOMPRESSOR_PAYLOAD" in result.output
     assert "Find auth" in result.output
+
+
+def test_hook_request_rewrite_cli(tmp_path) -> None:
+    request = {"messages": [{"role": "user", "content": json.dumps([{"id": i, "kind": "event"} for i in range(20)])}]}
+    path = tmp_path / "request.json"
+    path.write_text(json.dumps({"request": request}), encoding="utf-8")
+    result = runner.invoke(
+        app,
+        [
+            "hook",
+            "request-rewrite",
+            str(path),
+            "--store-dir",
+            str(tmp_path),
+            "--threshold-chars",
+            "0",
+        ],
+    )
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["decision"] == "rewrite"
+    assert payload["telemetry"]["rewrite_count"] == 1
+
+
+def test_hook_request_rewrite_cli_request_only(tmp_path) -> None:
+    request = {"messages": [{"role": "user", "content": json.dumps([{"id": i, "kind": "event"} for i in range(20)])}]}
+    result = runner.invoke(
+        app,
+        [
+            "hook",
+            "request-rewrite",
+            "-",
+            "--store-dir",
+            str(tmp_path),
+            "--threshold-chars",
+            "0",
+            "--request-only",
+        ],
+        input=json.dumps(request),
+    )
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    contents = [message["content"] for message in payload["messages"]]
+    assert any(content.startswith("<kompressor:schema_rows_v1>") for content in contents)
 
 
 def test_bench_json() -> None:
