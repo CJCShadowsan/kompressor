@@ -120,3 +120,27 @@ class OMPKompressorPlugin(BaseKompressorPlugin):
             "Matches the omp harness adapter hooks; compresses before request dispatch in the agent runtime.",
         ),
     )
+
+    def prepare_user_input(self, content: str, *, task: str = "") -> PluginResult:
+        result = super().prepare_user_input(content, task=task)
+        if result.changed and result.bundle:
+            for line in result.bundle.content.split("\n"):
+                if "KOMPRESSOR_TOKEN_SAVINGS" in line:
+                    print(f"[kompressor-omp] Turn savings: {line}")
+                    break
+        return result
+
+    def prepare_tool_output(self, content: str, *, tool_name: str = "") -> PluginResult:
+        result = super().prepare_tool_output(content, tool_name=tool_name)
+        if result.changed and result.bundle:
+            for line in result.bundle.content.split("\n"):
+                if "KOMPRESSOR_TOKEN_SAVINGS" in line:
+                    print(f"[kompressor-omp] Tool output savings: {line}")
+                    break
+        return result
+
+    def prepare_request(self, request: dict[str, Any]) -> dict[str, Any]:
+        result = super().prepare_request(request)
+        # Print savings for any compression that occurred in request rewrite
+        # (Note: prepare_request returns dict; savings are embedded in result if rewritten)
+        return result
