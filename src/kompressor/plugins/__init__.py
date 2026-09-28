@@ -12,6 +12,7 @@ from kompressor.plugins.builtin import (
     GenericKompressorPlugin,
     HermesKompressorPlugin,
     OpenAIKompressorPlugin,
+    OMPKompressorPlugin,
 )
 
 _PLUGIN_CLASSES: dict[str, type[BaseKompressorPlugin]] = {
@@ -21,7 +22,7 @@ _PLUGIN_CLASSES: dict[str, type[BaseKompressorPlugin]] = {
     "openai": OpenAIKompressorPlugin,
     "gemini": GeminiKompressorPlugin,
     "hermes": HermesKompressorPlugin,
-    "codex": CodexKompressorPlugin,
+    "omp": OMPKompressorPlugin,
 }
 
 
@@ -63,4 +64,5 @@ __all__ = [
     "available_plugins",
     "get_plugin",
     "plugin_manifests",
+    "OMPKompressorPlugin",
 ]

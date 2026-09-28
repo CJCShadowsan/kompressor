@@ -105,3 +105,18 @@ class CodexKompressorPlugin(BaseKompressorPlugin):
             "model requests.",
         ),
     )
+
+class OMPKompressorPlugin(BaseKompressorPlugin):
+    manifest = PluginManifest(
+        name="kompressor-omp",
+        harness="omp",
+        entrypoint="kompressor.plugins.builtin:OMPKompressorPlugin",
+        mode="omp-harness-adapter",
+        hooks=("prepare_user_input", "prepare_tool_output", "prepare_request"),
+        transparent=True,
+        install_hint="Integrate through kompressor harness adapter: `kompressor compress --harness omp`.",
+        notes=(
+            "Matches the omp harness adapter hooks; compresses before request dispatch in the agent runtime.",
+ (feat: add OMP harness adapter and plugin integration)
+        ),
+    )

@@ -9,6 +9,7 @@ from kompressor.harnesses.gemini import GeminiHarnessAdapter
 from kompressor.harnesses.generic import GenericHarnessAdapter
 from kompressor.harnesses.hermes import HermesHarnessAdapter
 from kompressor.harnesses.openai import OpenAIHarnessAdapter
+from kompressor.harnesses.omp import OMPHarnessAdapter
 
 _ADAPTERS = {
     "generic": GenericHarnessAdapter,
@@ -18,6 +19,7 @@ _ADAPTERS = {
     "openai": OpenAIHarnessAdapter,
     "gemini": GeminiHarnessAdapter,
     "hermes": HermesHarnessAdapter,
+    "omp": OMPHarnessAdapter,
 }
 
 
@@ -38,6 +40,7 @@ __all__ = [
     "HarnessAdapter",
     "HarnessBundle",
     "HermesHarnessAdapter",
+    "OMPHarnessAdapter",
     "OpenAIHarnessAdapter",
     "get_harness_adapter",
 ]
