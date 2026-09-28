@@ -23,6 +23,12 @@ class OMPHarnessAdapter:
         if task:
             parts.extend(["", "USER_TASK:", task])
         content = "\n".join(parts)
+        stats = result.token_stats
+        savings_line = (
+            f"\nKOMPRESSOR_TOKEN_SAVINGS: {stats.saved_tokens_estimate:,} / {stats.baseline_tokens_estimate:,} "
+            f"({stats.percent_saved_estimate:.2f}%) | cost delta: ${stats.saved_cost_estimate_usd:.6f}"
+        )
+        content += savings_line
         return HarnessBundle(
             self.name,
             content,
