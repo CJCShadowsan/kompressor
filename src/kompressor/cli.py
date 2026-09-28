@@ -139,7 +139,18 @@ def compress(
         output.write_text(text, encoding="utf-8")
     else:
         typer.echo(text)
+        _echo_savings(result.token_stats)
 
+
+
+def _echo_savings(stats) -> None:
+    """Print token savings summary after compression."""
+    saved = stats.saved_tokens_estimate
+    total = stats.baseline_tokens_estimate
+    pct = stats.percent_saved_estimate
+    cost = stats.saved_cost_estimate_usd
+    typer.echo(f"Tokens saved: {saved:,} / {total:,} ({pct:.2f}%)")
+    typer.echo(f"Cost delta: ${cost:.6f}")
 
 @app.command()
 def decompress(path: Path, compare_original: Path | None = typer.Option(None, "--compare-original")) -> None:
